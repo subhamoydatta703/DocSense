@@ -1,8 +1,15 @@
 {
   "name": "backend",
-  "module": "index.ts",
+  "module": "src/server.ts",
   "type": "module",
   "private": true,
+  "scripts": {
+    "start": "bun run src/server.ts",
+    "dev": "bun --watch src/server.ts",
+    "db:migrate": "bunx prisma migrate dev",
+    "db:push": "bunx prisma db push",
+    "db:studio": "bunx prisma studio"
+  },
   "devDependencies": {
     "@types/bun": "latest",
     "@types/cors": "^2.8.19",
