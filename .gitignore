@@ -66,4 +66,4 @@ Thumbs.db
 .eslintcache
 
 # Prisma generated files
-/backend/generated/prisma/
+/backend/prisma/generated/

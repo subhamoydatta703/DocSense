@@ -59,12 +59,36 @@ PORT=3000
 
 #### Backend
 
-To start the backend server in development mode:
+To start the backend server in development mode with hot reloading:
 
 ```bash
 cd backend
-bun run index.ts
+bun run dev
 ```
+
+To run in production mode:
+
+```bash
+cd backend
+bun run start
+```
+
+### Database Operations (Prisma)
+
+Ensure you run these commands from the `backend/` directory:
+
+- **Generate Client**:
+  ```bash
+  bunx --bun prisma generate
+  ```
+- **Run Migrations**:
+  ```bash
+  bun run db:migrate
+  ```
+- **Open Prisma Studio**:
+  ```bash
+  bun run db:studio
+  ```
 
 ## Verification
 
@@ -73,3 +97,4 @@ Validate the backend TypeScript compiler configuration and dependencies configur
 ```bash
 bun pm trust
 ```
+
