@@ -5,9 +5,38 @@
 
 generator client {
   provider = "prisma-client"
-  output   = "../generated/prisma"
+  output = "./generated"
 }
 
 datasource db {
   provider = "postgresql"
+}
+
+enum DocumentStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+model User {
+  id         String    @id @default(uuid())
+  clerkId String @unique
+  documents Document[]
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+}
+
+model Document {
+  id           String         @id @default(uuid())
+  originalName String
+  s3Key        String
+  mimeType     String
+  size         Int
+  status       DocumentStatus @default(PENDING)
+  userId       String
+  user         User         @relation(fields: [userId], references: [id])
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  @@index([userId])
 }
