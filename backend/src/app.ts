@@ -1,5 +1,7 @@
 import express from "express";
 import cors from "cors";
+import { prisma } from "./config/db";
+
 const app = express();
 
 // Middlewares
@@ -36,8 +38,8 @@ app.use(
 app.get("/health", async (req, res) => {
   let dbStatus = "unknown";
   try {
-    // await prisma.$queryRaw`SELECT 1`;
-    dbStatus = "not connected";
+    await prisma.$queryRaw`SELECT 1`;
+    dbStatus = "connected";
   } catch (error: any) {
     dbStatus = `disconnected: ${error.message || error}`;
   }
