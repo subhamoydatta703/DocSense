@@ -6,5 +6,7 @@ export const CreateDocumentSchema = z.object({
   originalName: z.string().min(1, "Original name is required"),
   userId: z.string().uuid("Invalid user ID format"),
 });
-
-// export type CreateResumeInput = z.infer<typeof CreateResumeSchema>;
+export const CreatedUserSchema = z.object({
+  id: z.string().min(1, "ID is required"),
+  email: z.string().email("Invalid email format"),
+});

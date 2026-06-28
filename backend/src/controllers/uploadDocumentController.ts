@@ -1,9 +1,9 @@
 import type { Response } from "express";
 import { createFileDB } from "../services/uploadDocumentService";
-// import type { AuthenticatedRequest } from "../middleware/authMiddleware";
 import { uploadFile } from "../services/storage/s3storageService";
+import type { AuthenticatedRequest } from "../middlewares/authMiddleware";
 
-export const uploadDocument = async (req: any, res: Response) => {
+export const uploadDocument = async (req: AuthenticatedRequest, res: Response) => {
   try {
     if (!req.file) {
       return res.status(400).json({

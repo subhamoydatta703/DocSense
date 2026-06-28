@@ -1,6 +1,8 @@
 import express from "express";
 import cors from "cors";
 import { prisma } from "./config/db";
+import { clerkMiddleware } from "@clerk/express";
+import uploadRoutes from "./routes/multerRoutes";
 
 const app = express();
 
@@ -32,8 +34,11 @@ app.use(
   })
 );
 
+app.use(clerkMiddleware());
 
 // API Routes
+app.use("/api", uploadRoutes);
+
 // Health Check Route
 app.get("/health", async (req, res) => {
   let dbStatus = "unknown";
