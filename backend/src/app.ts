@@ -34,7 +34,7 @@ app.use(
   })
 );
 
-app.use(clerkMiddleware());
+// app.use(clerkMiddleware());
 
 // API Routes
 app.use("/api", uploadRoutes);
