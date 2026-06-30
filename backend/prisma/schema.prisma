@@ -35,7 +35,20 @@ model Document {
   status       DocumentStatus @default(PENDING)
   userId       String
   user         User         @relation(fields: [userId], references: [id])
+  chunks       DocumentChunk[] 
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
   @@index([userId])
+}
+
+model DocumentChunk {
+  id          String    @id @default(uuid())
+
+  documentId  String
+  document    Document  @relation(fields: [documentId], references: [id])
+
+  content     String
+  chunkIndex  Int
+
+  createdAt   DateTime  @default(now())
 }
