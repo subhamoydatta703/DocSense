@@ -3,6 +3,8 @@ import {prisma} from "../../config/db";
 import { extractPDFText } from "../../utils/pdfParser";
 
 
+// get data from s3 -> parsed it to text -> return as string
+
 export const getParsedData = async (fileId: string): Promise<String> => {
     try {
         const document = await prisma.document.findUnique({

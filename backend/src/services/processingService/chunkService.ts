@@ -1,7 +1,7 @@
 import { RecursiveCharacterTextSplitter } from "@langchain/textsplitters";
-import { getParsedData } from "./getData";
+import { getParsedData } from "./getDataService";
 
-
+// get string from getDataService -> creates chunks of that string
 export const createChunks = async (documentID: string): Promise<string[]> => {
     try {
         const splitter = new RecursiveCharacterTextSplitter({

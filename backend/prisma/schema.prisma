@@ -49,6 +49,6 @@ model DocumentChunk {
 
   content     String
   chunkIndex  Int
-
+  
   createdAt   DateTime  @default(now())
 }
