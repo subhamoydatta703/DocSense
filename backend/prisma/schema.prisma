@@ -49,6 +49,7 @@ model DocumentChunk {
 
   content     String
   chunkIndex  Int
+  embedding   Unsupported("vector(768)")
   
   createdAt   DateTime  @default(now())
 }
