@@ -1,0 +1,1 @@
+// user ask questions -> function -> embedding of the quetion -> serch those embeddings and return top 5 resuls from pgvector -> filter by distance ->if length==0 -> not enough info -> else -> ai call to answer the question

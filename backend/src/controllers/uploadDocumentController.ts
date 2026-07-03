@@ -23,7 +23,7 @@ export const uploadDocument = async (req: AuthenticatedRequest, res: Response) =
     // Save to DB
     const fileData = await createFileDB(uploadedKey, originalName, userId);
 
-    console.log("fileData from uploaddocument controller", JSON.stringify(fileData, null, 2));
+    console.log("fileData from upload document controller", JSON.stringify(fileData, null, 2));
 
     return res.status(200).json({
       success: true,
