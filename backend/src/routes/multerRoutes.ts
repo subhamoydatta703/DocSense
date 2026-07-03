@@ -7,7 +7,7 @@ import multer from "multer";
 const router = Router();
 
 router.post("/upload", authMiddleware, (req, res, next) => {
-    upload.single("resume")(req, res, (err) => {
+    upload.single("document")(req, res, (err) => {
         if (err instanceof multer.MulterError) {
             if (err.code === "LIMIT_FILE_SIZE") {
                 return res.status(400).json({
