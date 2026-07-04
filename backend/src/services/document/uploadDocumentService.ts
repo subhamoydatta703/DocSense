@@ -1,22 +1,22 @@
-import { prisma, Prisma } from "../config/db";
-import { CreateDocumentSchema } from "../utils/validation";
-import { deleteFile } from "./storage/s3storageService";
+import { prisma, Prisma } from "../../config/db";
+import { CreateDocumentSchema } from "../../utils/validation";
+import { deleteFile } from "../storage/s3storageService";
 // import { redisClient } from "../config/redis.caching";
 
 export const createFileDB = async (
-  s3Key: string, 
+  s3Key: string,
   originalName: string,
   userId: string
 ) => {
   // Check for duplicates based on originalName AND userId
   const existingDocument = await prisma.document.findFirst({
-    where: { 
+    where: {
       originalName: originalName,
       userId: userId,
     },
   });
   console.log("Checking duplicate in DB: ", existingDocument);
-  
+
   if (existingDocument) {
     // Clean up old file from S3
     try {
@@ -43,7 +43,7 @@ export const createFileDB = async (
 
     return { Document: updatedDocument };
   }
-  
+
   const validatedDocument = CreateDocumentSchema.parse({
     fileName: originalName,
     s3Key: s3Key,
@@ -51,10 +51,10 @@ export const createFileDB = async (
     userId: userId,
   });
 
-  const Document = await prisma.document.create({ 
+  const Document = await prisma.document.create({
     data: validatedDocument,
   });
-  
+
   return { Document };
 };
 
@@ -104,18 +104,18 @@ export const deleteDocumentService = async (DocumentID: string, userId: string) 
   });
 };
 
-export const getS3KeyFromDB = async ( fileID: string ) => {
-    try {
-      const file = await prisma.document.findUnique({
-          where: { id: fileID },
-          select: { s3Key: true },
-      });
-      if (!file) {
-        throw new Error("File not found");
-      }
-      return file.s3Key;
-    } catch (error) {
-      console.error("Error while get S3 key from DB in service", error);
-      throw error;
+export const getS3KeyFromDB = async (fileID: string) => {
+  try {
+    const file = await prisma.document.findUnique({
+      where: { id: fileID },
+      select: { s3Key: true },
+    });
+    if (!file) {
+      throw new Error("File not found");
     }
+    return file.s3Key;
+  } catch (error) {
+    console.error("Error while get S3 key from DB in service", error);
+    throw error;
+  }
 }

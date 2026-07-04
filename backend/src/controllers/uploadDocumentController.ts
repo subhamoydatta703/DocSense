@@ -1,5 +1,5 @@
 import type { Response } from "express";
-import { createFileDB } from "../services/uploadDocumentService";
+import { createFileDB } from "../services/document/uploadDocumentService";
 import { uploadFile } from "../services/storage/s3storageService";
 import type { AuthenticatedRequest } from "../middlewares/authMiddleware";
 
@@ -13,13 +13,13 @@ export const uploadDocument = async (req: AuthenticatedRequest, res: Response) =
     }
     const originalName = req.file.originalname;
     const userId = req.userId!;
-    
+
     // Generate S3 key
     const s3Key = `documents/${Date.now()}-${originalName}`;
-    
+
     // Upload to S3
     const uploadedKey = await uploadFile(req.file.buffer, s3Key);
-    
+
     // Save to DB
     const fileData = await createFileDB(uploadedKey, originalName, userId);
 
