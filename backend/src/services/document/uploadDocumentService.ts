@@ -1,4 +1,5 @@
 import { prisma, Prisma } from "../../config/db";
+import { redisClient } from "../../config/redisCaching";
 import { CreateDocumentSchema } from "../../utils/validation";
 import { deleteFile } from "../storage/s3storageService";
 // import { redisClient } from "../config/redis.caching";
@@ -25,12 +26,12 @@ export const createFileDB = async (
       console.error("Failed to delete old file from S3:", err);
     }
 
-    // const cacheKey = `user:${userId}:Document:${existingDocument.id}`;
-    // try {
-    //   // await redisClient.del(cacheKey);
-    // } catch (err) {
-    //   console.error("Failed to invalidate Redis cache:", err);
-    // }
+    const cacheKey = `user:${userId}:Document:${existingDocument.id}`;
+    try {
+      await redisClient.del(cacheKey);
+    } catch (err) {
+      console.error("Failed to invalidate Redis cache:", err);
+    }
 
     const updatedDocument = await prisma.document.update({
       where: { id: existingDocument.id },
@@ -104,10 +105,10 @@ export const deleteDocumentService = async (DocumentID: string, userId: string) 
   });
 };
 
-export const getS3KeyFromDB = async (fileID: string) => {
+export const getS3KeyFromDB = async (documentId: string) => {
   try {
     const file = await prisma.document.findUnique({
-      where: { id: fileID },
+      where: { id: documentId },
       select: { s3Key: true },
     });
     if (!file) {

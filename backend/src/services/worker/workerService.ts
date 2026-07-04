@@ -2,6 +2,7 @@ import { Worker } from "bullmq";
 import { bullRedisConnection } from "../../config/redisBullMQ";
 // import { analyzeThisdocument } from "./documentAnalysisService";
 import { workerPrisma } from "../../config/workerDB";
+import { processDocumentService } from "../processing/processDocumentService";
 
 let worker: Worker;
 
@@ -11,19 +12,19 @@ export async function startWorker() {
   worker = new Worker(
     "document-analysis",
     async (job) => {
-      const { fileID } = job.data;
+      const { documentId } = job.data;
 
-      console.log(`Processing job ${job.id} for file ${fileID}`);
+      console.log(`Processing job ${job.id} for file ${documentId}`);
       console.log("Worker processor function started");
 
-      if (!fileID) {
+      if (!documentId) {
         throw new Error("Invalid or missing file ID");
       }
 
       console.log("About to update status to PROCESSING");
 
       await workerPrisma.document.update({
-        where: { id: fileID },
+        where: { id: documentId },
         data: { status: "PROCESSING" },
       });
 
@@ -31,7 +32,8 @@ export async function startWorker() {
 
 
     // analyzing by calling ai function call here
-    // example: await analyzeThisDocument(fileID);
+    await processDocumentService(documentId);
+    
 
       console.log("analyze this document completed");
     },
@@ -58,15 +60,15 @@ export async function startWorker() {
     
     console.error("JOB FAILED");
     console.error("Job ID:", job?.id);
-    console.error("File ID:", job?.data?.fileID);
+    console.error("Document ID:", job?.data?.documentId);
     console.error("Error Message:", err.message);
     console.error("Error Stack:", err.stack);
     
 
-    if (job?.data?.fileID) {
+    if (job?.data?.documentId) {
       try {
         await workerPrisma.document.update({
-          where: { id: job.data.fileID },
+          where: { id: job.data.documentId },
           data: { status: "FAILED" },
         });
 
