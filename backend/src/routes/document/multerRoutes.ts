@@ -1,7 +1,7 @@
 import { Router } from "express";
-import upload from "../middlewares/multerMiddleware";
-import { uploadDocument } from "../controllers/uploadDocumentController";
-import { authMiddleware } from "../middlewares/authMiddleware";
+import upload from "../../middlewares/multerMiddleware";
+import { uploadDocument } from "../../controllers/document/uploadDocumentController";
+import { authMiddleware } from "../../middlewares/authMiddleware";
 import multer from "multer";
 
 const router = Router();

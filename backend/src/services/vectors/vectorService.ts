@@ -4,12 +4,12 @@ import { prisma } from "../../config/db";
 //   Create a DocumentChunk with its embedding
 
 export const createVector = async (
-    documentId: string,
-    content: string,
-    chunkIndex: number,
-    embedding: number[]
+  documentId: string,
+  content: string,
+  chunkIndex: number,
+  embedding: number[]
 ) => {
-    await prisma.$executeRaw`
+  await prisma.$executeRaw`
     INSERT INTO "DocumentChunk" (
       "documentId",
       "content",
@@ -29,44 +29,44 @@ export const createVector = async (
 //  * Get all chunks of a document
 
 export const getVectorsByDocumentId = async (
-    documentId: string
+  documentId: string
 ) => {
-    const result = await prisma.$queryRaw`
+  const result = await prisma.$queryRaw`
     SELECT *
     FROM "DocumentChunk"
     WHERE "documentId" = ${documentId}
     ORDER BY "chunkIndex";
   `;
 
-    return result;
+  return result;
 };
 
 
 //   Find similar chunks
 
 export const searchSimilarVectors = async (
-    embedding: number[],
-    limit: number = 5
+  embedding: number[],
+  limit: number = 5
 ) => {
-    const result = await prisma.$queryRaw`
-    SELECT *,
-           embedding <=> ${embedding}::vector AS distance
-    FROM "DocumentChunk"
+  const result = await prisma.$queryRaw`
+    SELECT dc.*, d."originalName" AS "documentName",
+           dc.embedding <=> ${embedding}::vector AS distance
+    FROM "DocumentChunk" dc
+    JOIN "Document" d ON dc."documentId" = d.id
     ORDER BY distance ASC
     LIMIT ${limit};
   `;
-
-    return result;
+  return result;
 };
 
 
 //   Update embedding of a chunk
 
 export const updateVector = async (
-    chunkId: string,
-    embedding: number[]
+  chunkId: string,
+  embedding: number[]
 ) => {
-    await prisma.$executeRaw`
+  await prisma.$executeRaw`
     UPDATE "DocumentChunk"
     SET embedding = ${embedding}::vector
     WHERE id = ${chunkId};
@@ -77,9 +77,9 @@ export const updateVector = async (
 //   Delete all chunks of a document
 
 export const deleteVectorsByDocumentId = async (
-    documentId: string
+  documentId: string
 ) => {
-    await prisma.$executeRaw`
+  await prisma.$executeRaw`
     DELETE FROM "DocumentChunk"
     WHERE "documentId" = ${documentId};
   `;

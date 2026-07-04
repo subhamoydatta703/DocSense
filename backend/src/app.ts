@@ -2,7 +2,8 @@ import express from "express";
 import cors from "cors";
 import { prisma } from "./config/db";
 import { clerkMiddleware } from "@clerk/express";
-import uploadRoutes from "./routes/multerRoutes";
+import uploadRoutes from "./routes/document/multerRoutes";
+import queryRoutes from "./routes/query/queryRoutes";
 
 const app = express();
 
@@ -38,6 +39,7 @@ app.use(
 
 // API Routes
 app.use("/api", uploadRoutes);
+app.use("/api", queryRoutes);
 
 // Health Check Route
 app.get("/health", async (req, res) => {

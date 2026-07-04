@@ -1,7 +1,7 @@
 import type { Response } from "express";
-import { createFileDB } from "../services/document/uploadDocumentService";
-import { uploadFile } from "../services/storage/s3storageService";
-import type { AuthenticatedRequest } from "../middlewares/authMiddleware";
+import { createFileDB } from "../../services/document/uploadDocumentService";
+import { uploadFile } from "../../services/storage/s3storageService";
+import type { AuthenticatedRequest } from "../../middlewares/authMiddleware";
 
 export const uploadDocument = async (req: AuthenticatedRequest, res: Response) => {
   try {
