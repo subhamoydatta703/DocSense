@@ -2,6 +2,7 @@ import { prisma, Prisma } from "../../config/db";
 import { redisClient } from "../../config/redisCaching";
 import { CreateDocumentSchema } from "../../utils/validation";
 import { deleteFile } from "../storage/s3storageService";
+import { deleteVectorsByDocumentId } from "../vectors/vectorService";
 // import { redisClient } from "../config/redis.caching";
 
 export const createFileDB = async (
@@ -24,6 +25,14 @@ export const createFileDB = async (
       await deleteFile(existingDocument.s3Key);
     } catch (err) {
       console.error("Failed to delete old file from S3:", err);
+    }
+
+    // delete chunks
+    try {
+      await deleteVectorsByDocumentId(existingDocument.id);
+    } catch (error) {
+      console.error("Error deleting old chunks in upload document service: ", error);
+      throw error;
     }
 
     const cacheKey = `user:${userId}:Document:${existingDocument.id}`;
@@ -99,6 +108,16 @@ export const deleteDocumentService = async (DocumentID: string, userId: string) 
   } catch (err) {
     console.error("Error deleting from S3 during delete service: ", err);
   }
+
+// delete chunks
+try {
+  await deleteVectorsByDocumentId(DocumentID);
+  
+} catch (error) {
+  console.error("Error deleting vectors from DB during delete service: ", error);
+  throw error;
+}
+
 
   return await prisma.document.delete({
     where: { id: DocumentID },

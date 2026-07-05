@@ -10,20 +10,20 @@ export interface AuthenticatedRequest extends Request {
 export async function authMiddleware(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
     
-    // DEV ONLY: mock auth bypass
-    if (process.env.NODE_ENV === "development" && req.headers["x-mock-user-id"]) {
-  const mockId = req.headers["x-mock-user-id"] as string;
+    // // DEV ONLY: mock auth bypass
+    // if (process.env.NODE_ENV === "development" && req.headers["x-mock-user-id"]) {
+  // const mockId = req.headers["x-mock-user-id"] as string;
   
-  // Ensure mock user exists in DB
-  await prisma.user.upsert({
-    where: { id: mockId },
-    update: {},
-    create: { id: mockId, email: "mockuser@test.com" }
-  });
+  // // Ensure mock user exists in DB
+  // await prisma.user.upsert({
+    // where: { id: mockId },
+    // update: {},
+    // create: { id: mockId, email: "mockuser@test.com" }
+  // });
 
-  req.userId = mockId;
-  return next();
-}
+  // req.userId = mockId;
+  // return next();
+// }
     
     const { userId } = getAuth(req);
     if (!userId) {
