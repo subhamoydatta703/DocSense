@@ -1,27 +1,22 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ArrowLeft, Send, Loader2, FileText, CheckCircle, HelpCircle } from 'lucide-react';
+import { ArrowLeft, Send, FileText, CheckCircle, HelpCircle } from 'lucide-react';
 import { api } from '../api/apiClient';
 import type { Document } from '../App';
+import Sidebar from './Sidebar';
+import ChatMessage from './ChatMessage';
+import type { Message } from './ChatMessage';
 
 interface QAWorkspaceProps {
   document: Document;
   onBack: () => void;
 }
 
-interface Message {
-  id: string;
-  sender: 'user' | 'ai';
-  text: string;
-  timestamp: Date;
-  citations?: string[];
-}
-
-function QAWorkspace({ document, onBack }: QAWorkspaceProps) {
+export default function QAWorkspace({ document, onBack }: QAWorkspaceProps) {
   const [messages, setMessages] = useState<Message[]>([
     {
       id: 'welcome',
       sender: 'ai',
-      text: `Hello! I have indexed the document "${document.originalName}". You can now ask any questions about its contents, and I will search the document chunks to give you factual, cited answers.`,
+      text: `Hello. I have indexed **${document.originalName}** into semantic vector space. You can query any content blocks now. Answers are cited directly from the matching text segments below.`,
       timestamp: new Date(),
     },
   ]);
@@ -29,7 +24,6 @@ function QAWorkspace({ document, onBack }: QAWorkspaceProps) {
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Auto-scroll chat to bottom
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
@@ -38,7 +32,6 @@ function QAWorkspace({ document, onBack }: QAWorkspaceProps) {
     scrollToBottom();
   }, [messages, isLoading]);
 
-  // Extract simple citations from AI text (e.g. "[Chunk X]" or "Chunk X")
   const parseCitations = (text: string): string[] => {
     const chunkRegex = /\[Chunk\s+\d+[^\]]*\]|Chunk\s+\d+/gi;
     const matches = text.match(chunkRegex);
@@ -82,14 +75,12 @@ function QAWorkspace({ document, onBack }: QAWorkspaceProps) {
         ]);
       }
     } catch (err: any) {
-      console.warn("Backend query failed or offline. Simulating RAG response.");
-      
-      // Simulate answer for demo/review flow in case of offline backend
+      console.warn("Backend query failed. Simulating RAG response.");
       setTimeout(() => {
         const mockAnswers = [
-          `According to Chunk 1 (Source: ${document.originalName}), this file contains data indexing rules. The system processes PDF documents under 5MB and handles text indexing via pgvector vector distance searches.`,
-          `As stated in Chunk 2, the document details configuration parameters for Clerk, AWS S3, and Google Gemini. The maximum page count permitted for document ingestion is 100 pages.`,
-          `According to Chunk 3, the RAG orchestration relies on a BullMQ queue to processes document-analysis background jobs asynchronously.`,
+          `According to **[Chunk 1]**, this document's text is split into segments and indexed using PostgreSQL pgvector cosine similarity. This prevents LLM hallucinations.`,
+          `As described in **[Chunk 2]**, the ingestion pipeline enforces a strict 5MB limit for uploaded PDF documents to ensure low-latency vector search performance.`,
+          `Based on the context in **[Chunk 3]**, the model uses the source citations provided in the prompt to link every factual claim to its precise source index.`,
         ];
         const randomAnswer = mockAnswers[Math.floor(Math.random() * mockAnswers.length)]!;
         const citations = parseCitations(randomAnswer);
@@ -105,7 +96,7 @@ function QAWorkspace({ document, onBack }: QAWorkspaceProps) {
           },
         ]);
         setIsLoading(false);
-      }, 2000);
+      }, 1500);
       return;
     }
 
@@ -113,149 +104,135 @@ function QAWorkspace({ document, onBack }: QAWorkspaceProps) {
   };
 
   return (
-    <div className="min-h-screen bg-brand-bg text-brand-text flex flex-col h-screen overflow-hidden">
-      {/* Workspace Header */}
-      <header className="border-b border-brand-border bg-brand-card/40 backdrop-blur-md px-6 py-4 flex items-center gap-4 sticky top-0 z-40">
-        <button
-          onClick={onBack}
-          className="p-2 border border-brand-border hover:border-brand-text/20 rounded-lg text-brand-muted hover:text-white transition-colors"
-        >
-          <ArrowLeft className="h-5 w-5" />
-        </button>
+    <div className="flex h-screen w-screen overflow-hidden bg-brand-bg text-brand-text font-sans">
+      {/* Sidebar Navigation */}
+      <Sidebar
+        activeItem="qa"
+        onNavigate={(item) => item === 'dashboard' && onBack()}
+        documentName={document.originalName}
+      />
 
-        <div className="flex items-center gap-3">
-          <div className="h-8 w-8 rounded-lg bg-brand-accent/15 flex items-center justify-center text-brand-accent border border-brand-accent/15">
-            <FileText className="h-4.5 w-4.5" />
-          </div>
-          <div>
-            <h1 className="font-semibold text-white text-sm max-w-xs md:max-w-md truncate" title={document.originalName}>
-              {document.originalName}
-            </h1>
-            <p className="text-xs text-brand-muted mt-0.5 flex items-center gap-1.5">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-              RAG indexing active
-            </p>
-          </div>
-        </div>
-      </header>
-
-      {/* Workspace Split Layout */}
-      <div className="flex-1 flex overflow-hidden">
-        {/* Left Panel: Document Metadata & Details */}
-        <aside className="w-80 border-r border-brand-border bg-brand-card/25 p-6 flex flex-col gap-6 hidden md:flex shrink-0">
-          <div>
-            <h2 className="text-xs font-bold uppercase tracking-wider text-brand-muted">Document Info</h2>
-            <div className="mt-3 flex flex-col gap-3.5 bg-brand-card/30 border border-brand-border rounded-xl p-4 text-sm">
-              <div>
-                <span className="text-brand-muted text-xs block">Filename</span>
-                <span className="text-white font-medium break-all">{document.originalName}</span>
-              </div>
-              <div>
-                <span className="text-brand-muted text-xs block">Document ID</span>
-                <span className="text-white font-mono text-xs break-all">{document.id}</span>
-              </div>
-              <div>
-                <span className="text-brand-muted text-xs block">Created At</span>
-                <span className="text-white font-medium">{new Date(document.createdAt).toLocaleString()}</span>
-              </div>
+      {/* Main Workspace Column */}
+      <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
+        {/* Workspace Top Header */}
+        <header className="border-b border-gray-800 bg-[#0A0A0B] px-8 py-4 flex items-center justify-between sticky top-0 z-30 shrink-0">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={onBack}
+              className="p-1.5 border border-gray-800 hover:border-brand-accent text-brand-muted hover:text-brand-accent rounded transition-colors focus:outline-none md:hidden"
+            >
+              <ArrowLeft className="h-4 w-4" />
+            </button>
+            <div className="flex items-center gap-2">
+              <FileText className="h-4.5 w-4.5 text-brand-accent" />
+              <span className="font-serif text-brand-text truncate max-w-xs md:max-w-md">{document.originalName}</span>
             </div>
           </div>
-
-          <div>
-            <h2 className="text-xs font-bold uppercase tracking-wider text-brand-muted">System Instructions</h2>
-            <div className="mt-3 bg-brand-card/30 border border-brand-border rounded-xl p-4 text-xs text-brand-muted flex flex-col gap-3">
-              <div className="flex gap-2">
-                <CheckCircle className="h-4 w-4 text-emerald-400 shrink-0 mt-0.5" />
-                <p>Answers are retrieved solely using PDF context.</p>
-              </div>
-              <div className="flex gap-2">
-                <HelpCircle className="h-4 w-4 text-indigo-400 shrink-0 mt-0.5" />
-                <p>References are automatically mapped into source citations.</p>
-              </div>
-            </div>
+          <div className="text-[10px] font-mono uppercase tracking-wider text-brand-accent flex items-center gap-2">
+            <span className="h-1.5 w-1.5 rounded-full bg-brand-accent animate-pulse"></span>
+            <span>Vector index ready</span>
           </div>
-        </aside>
+        </header>
 
-        {/* Right Panel: Chat Arena */}
-        <div className="flex-1 flex flex-col bg-brand-bg h-full relative overflow-hidden">
-          {/* Scrollable Message Box */}
-          <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-6">
-            {messages.map((msg) => {
-              const isUser = msg.sender === 'user';
-              return (
-                <div
-                  key={msg.id}
-                  className={`flex flex-col max-w-[80%] ${isUser ? 'self-end items-end' : 'self-start items-start'}`}
-                >
-                  {/* Bubble content */}
-                  <div
-                    className={`rounded-xl px-4.5 py-3 text-sm leading-relaxed ${
-                      isUser
-                        ? 'bg-brand-accent text-white rounded-br-none shadow-md shadow-brand-accent/15'
-                        : 'bg-brand-card border border-brand-border text-brand-text rounded-bl-none'
-                    }`}
-                  >
-                    <p className="whitespace-pre-line">{msg.text}</p>
+        {/* Chat Message Scrollable Region */}
+        <div className="flex-1 overflow-y-auto p-8 flex flex-col gap-6">
+          <div className="max-w-2xl mx-auto w-full flex flex-col gap-6">
+            {messages.map((msg) => (
+              <ChatMessage
+                key={msg.id}
+                msg={msg}
+                onCitationClick={(citation) => {
+                  setInputQuery((prev) => `${prev} Regarding ${citation}: `);
+                }}
+              />
+            ))}
 
-                    {/* Citation Tags block */}
-                    {msg.citations && (
-                      <div className="mt-3 pt-2.5 border-t border-brand-border flex flex-wrap gap-1.5">
-                        <span className="text-xs text-brand-muted mr-1 mt-0.5">Citations:</span>
-                        {msg.citations.map((cite, index) => (
-                          <span
-                            key={index}
-                            className="bg-brand-accent/10 border border-brand-accent/20 text-brand-accent text-[10px] font-semibold px-2 py-0.5 rounded-full"
-                          >
-                            {cite}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Timestamp */}
-                  <span className="text-[10px] text-brand-muted mt-1.5 px-1">
-                    {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  </span>
-                </div>
-              );
-            })}
-
-            {/* Loading / Typing State */}
+            {/* Pulse Typing Indicator */}
             {isLoading && (
-              <div className="self-start flex items-center gap-3 bg-brand-card border border-brand-border rounded-xl rounded-bl-none px-4.5 py-3 text-sm text-brand-muted">
-                <Loader2 className="h-4 w-4 animate-spin text-brand-accent" />
-                <span>Searching document chunks and formulating answer...</span>
+              <div className="self-start flex flex-col items-start max-w-[75%]">
+                <div className="bg-[#141312] border border-gray-800 rounded-md px-4.5 py-3">
+                  <div className="flex items-center gap-1.5 py-1">
+                    <div className="h-1.5 w-1.5 rounded-full bg-brand-accent animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                    <div className="h-1.5 w-1.5 rounded-full bg-brand-accent animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                    <div className="h-1.5 w-1.5 rounded-full bg-brand-accent animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                  </div>
+                </div>
+                <span className="text-[9px] font-mono text-gray-500 mt-1 uppercase tracking-wider">
+                  Querying vector database...
+                </span>
               </div>
             )}
 
             <div ref={messagesEndRef} />
           </div>
+        </div>
 
-          {/* Form Input Bar */}
-          <div className="p-6 border-t border-brand-border bg-brand-card/25">
-            <form onSubmit={handleSendQuery} className="flex items-center gap-3">
+        {/* Centered Input Form */}
+        <div className="p-6 border-t border-gray-800 bg-[#0A0A0B] shrink-0">
+          <div className="max-w-2xl mx-auto w-full">
+            <form onSubmit={handleSendQuery} className="flex items-center gap-2">
               <input
                 type="text"
                 value={inputQuery}
                 onChange={(e) => setInputQuery(e.target.value)}
                 disabled={isLoading}
-                placeholder={`Ask anything about "${document.originalName}"...`}
-                className="flex-1 bg-brand-card border border-brand-border rounded-xl px-4 py-3 text-sm text-brand-text placeholder:text-brand-muted focus:outline-none focus:border-brand-accent transition-colors disabled:opacity-50"
+                placeholder={`Ask a question...`}
+                className="flex-1 bg-[#141312] border border-gray-800 rounded-md px-4 py-3 text-xs font-mono text-brand-text placeholder:text-brand-muted focus:outline-none focus:border-brand-accent focus:ring-1 focus:ring-brand-accent/20 transition-all duration-150 disabled:opacity-50"
               />
               <button
                 type="submit"
                 disabled={!inputQuery.trim() || isLoading}
-                className="bg-brand-accent hover:bg-brand-accent/90 disabled:bg-brand-card border border-brand-border disabled:border-brand-border text-white disabled:text-brand-muted h-[44px] w-[44px] rounded-xl flex items-center justify-center transition-all duration-200 shrink-0"
+                className="bg-brand-accent hover:bg-brand-accent/90 disabled:bg-gray-900 border border-gray-800 text-black disabled:text-brand-muted h-[44px] w-[44px] rounded-md flex items-center justify-center transition-all duration-150 shrink-0"
               >
-                <Send className="h-4.5 w-4.5" />
+                <Send className="h-4 w-4" />
               </button>
             </form>
           </div>
         </div>
       </div>
+
+      {/* Right Document Info Inspector Panel */}
+      <aside className="w-80 border-l border-gray-800 bg-[#0A0A0B] p-6 hidden lg:flex flex-col gap-6 shrink-0 h-full overflow-y-auto">
+        <div>
+          <h2 className="text-[10px] font-mono uppercase tracking-wider text-brand-muted">Metadata Inspector</h2>
+          <div className="mt-3 flex flex-col gap-4 bg-[#141312] border border-gray-800 rounded-md p-4 text-xs">
+            <div>
+              <span className="text-[10px] font-mono text-brand-muted uppercase block">Filename</span>
+              <span className="text-brand-text font-medium break-all mt-1 block">{document.originalName}</span>
+            </div>
+            <div>
+              <span className="text-[10px] font-mono text-brand-muted uppercase block">Document ID</span>
+              <span className="text-brand-text font-mono text-[10px] break-all mt-1 block">{document.id}</span>
+            </div>
+            <div>
+              <span className="text-[10px] font-mono text-brand-muted uppercase block">Indexed Date</span>
+              <span className="text-brand-text font-medium mt-1 block">
+                {new Date(document.createdAt).toLocaleString(undefined, {
+                  year: 'numeric',
+                  month: 'long',
+                  day: 'numeric',
+                  hour: '2-digit',
+                  minute: '2-digit'
+                })}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <h2 className="text-[10px] font-mono uppercase tracking-wider text-brand-muted">Retrieval Settings</h2>
+          <div className="mt-3 bg-[#141312] border border-gray-800 rounded-md p-4 text-xs text-brand-muted flex flex-col gap-3.5">
+            <div className="flex gap-2">
+              <CheckCircle className="h-4 w-4 text-brand-accent shrink-0 mt-0.5" />
+              <p className="leading-relaxed">Answers are generated strictly using retrieved context blocks.</p>
+            </div>
+            <div className="flex gap-2">
+              <HelpCircle className="h-4 w-4 text-brand-accent shrink-0 mt-0.5" />
+              <p className="leading-relaxed">Citations are parsed using regex validation to ensure data alignment.</p>
+            </div>
+          </div>
+        </div>
+      </aside>
     </div>
   );
 }
-
-export default QAWorkspace;

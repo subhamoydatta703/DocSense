@@ -65,7 +65,36 @@ export const uploadDocument = async (req: AuthenticatedRequest, res: Response) =
 };
 
 
-// get documents
+// get document by id
+export const getDocumentById = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const userId = req.userId!;
+    const documentId = req.params.documentId as string;
+    const document = await prisma.document.findUnique({
+      where: { id: documentId, userId: userId },
+    });
+    if (!document) {
+      return res.status(404).json({
+        success: false,
+        message: "Document not found",
+      });
+    }
+    return res.status(200).json({
+      success: true,
+      message: "Document fetched successfully",
+      document,
+    });
+  } catch (error) {
+    console.error("getDocumentById controller error ", error);
+    return res.status(500).json({
+      success: false,
+      message: "getDocumentById controller error",
+    });
+  }
+};
+
+
+// get all documents
 export const getDocuments = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const userId = req.userId!;

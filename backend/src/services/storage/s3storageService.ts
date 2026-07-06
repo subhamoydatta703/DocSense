@@ -1,5 +1,5 @@
 import { s3Client } from "../../config/aws/s3Client";
-
+import {Readable} from "stream";
 import { PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
 
 
@@ -24,13 +24,17 @@ export const uploadFile = async (fileBuffer: Buffer, key: string): Promise<strin
 
 // for node.js readable stream
 const streamToBuffer = async (stream: any): Promise<Buffer> => {
-    return new Promise((resolve, reject) => {
-        const chunks: any[] = [];
-        stream.on("data", (chunk: any) => chunks.push(chunk));
-        stream.on("end", () => resolve(Buffer.concat(chunks)));
-        stream.on("error", (error: any) => reject(error));
-    })
-}
+  // Handle web ReadableStream (Bun) by converting to Node stream
+  if (typeof stream.on !== "function" && typeof stream.getReader === "function") {
+    stream = Readable.fromWeb(stream);
+  }
+  return new Promise((resolve, reject) => {
+    const chunks: any[] = [];
+    stream.on("data", (chunk: any) => chunks.push(chunk));
+    stream.on("end", () => resolve(Buffer.concat(chunks)));
+    stream.on("error", (error: any) => reject(error));
+  });
+};
 
 // get file to s3
 export const getFile = async (key: string): Promise<Buffer> => {

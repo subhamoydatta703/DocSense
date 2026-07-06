@@ -13,7 +13,12 @@ export const createEmbeddings = async (chunk: string): Promise<number[]> => {
     });
 
     console.log(response.embeddings);
-    return response.embeddings?.[0]?.values as number[] || [];
+    const values = response.embeddings?.[0]?.values;
+if (!values || values.length === 0) {
+  throw new Error("Embedding API returned empty values");
+}
+return values;
+
 
     }catch(error){
         console.error("Error creating embeddings: ", error);

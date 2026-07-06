@@ -1,20 +1,19 @@
 import { useState, useEffect } from 'react';
-import { UserButton } from '@clerk/clerk-react';
-import { Search, Plus, FileText, Loader2, AlertCircle, CheckCircle, RefreshCw } from 'lucide-react';
+import { Search, Plus, Loader2, FileUp } from 'lucide-react';
 import { api } from '../api/apiClient';
 import type { Document } from '../App';
 import UploadModal from './UploadModal';
+import Sidebar from './Sidebar';
 
 interface DashboardProps {
   onSelectDocument: (doc: Document) => void;
 }
 
-function Dashboard({ onSelectDocument }: DashboardProps) {
+export default function Dashboard({ onSelectDocument }: DashboardProps) {
   const [documents, setDocuments] = useState<Document[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-
 
   // Load and fetch documents
   const fetchDocuments = async () => {
@@ -25,7 +24,6 @@ function Dashboard({ onSelectDocument }: DashboardProps) {
       }
     } catch (err: any) {
       console.warn("GET /documents endpoint not fully implemented. Falling back to local state.");
-      // If endpoint is missing or returns 404, we load from localStorage to enable static fallback
       const localDocs = localStorage.getItem('docsense_documents');
       if (localDocs) {
         setDocuments(JSON.parse(localDocs));
@@ -54,7 +52,6 @@ function Dashboard({ onSelectDocument }: DashboardProps) {
           return { ...doc, status: 'PROCESSING' as const };
         }
         if (doc.status === 'PROCESSING') {
-          // 80% chance to complete, 20% to fail (for simulation fallback)
           const isDone = Math.random() > 0.3;
           return { ...doc, status: isDone ? 'COMPLETED' as const : 'FAILED' as const };
         }
@@ -64,7 +61,6 @@ function Dashboard({ onSelectDocument }: DashboardProps) {
       setDocuments(updatedDocs);
       localStorage.setItem('docsense_documents', JSON.stringify(updatedDocs));
 
-      // Attempt to fetch from real API if connected
       try {
         const response = await api.get('/documents');
         if (response.data && response.data.success) {
@@ -90,148 +86,141 @@ function Dashboard({ onSelectDocument }: DashboardProps) {
   );
 
   return (
-    <div className="min-h-screen bg-brand-bg text-brand-text flex flex-col">
-      {/* Header */}
-      <header className="border-b border-brand-border bg-brand-card/40 backdrop-blur-md px-6 py-4 flex items-center justify-between sticky top-0 z-40">
-        <div className="flex items-center gap-2">
-          <div className="h-8 w-8 rounded-lg bg-brand-accent flex items-center justify-center text-white font-bold">
-            D
+    <div className="flex h-screen w-screen overflow-hidden bg-brand-bg text-brand-text">
+      {/* Reusable Sidebar Component */}
+      <Sidebar
+        activeItem="dashboard"
+        onNavigate={() => {}}
+      />
+
+      {/* Main Dashboard Panel */}
+      <div className="flex-1 flex flex-col min-w-0 overflow-y-auto">
+        {/* Top Header / Search */}
+        <header className="border-b border-gray-800 bg-[#0A0A0B] px-8 py-4 flex items-center justify-between sticky top-0 z-30">
+          <div className="relative w-full max-w-md">
+            <Search className="absolute left-3 top-2.5 h-4 w-4 text-brand-muted" />
+            <input
+              type="text"
+              placeholder="Search indexed corpus..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full bg-brand-card border border-gray-800 rounded-md pl-9 pr-4 py-2 text-xs font-mono text-brand-text placeholder:text-brand-muted focus:outline-none focus:border-brand-accent focus:ring-1 focus:ring-brand-accent/20 transition-all duration-150"
+            />
           </div>
-          <span className="font-bold tracking-tight text-lg">DocSense</span>
-        </div>
 
-        {/* Global Search Bar */}
-        <div className="relative w-full max-w-md mx-4 hidden sm:block">
-          <Search className="absolute left-3 top-2.5 h-4.5 w-4.5 text-brand-muted" />
-          <input
-            type="text"
-            placeholder="Search documents by filename..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-brand-card border border-brand-border rounded-lg pl-10 pr-4 py-2 text-sm text-brand-text placeholder:text-brand-muted focus:outline-none focus:border-brand-accent transition-colors"
-          />
-        </div>
-
-        <div className="flex items-center gap-4">
-          <UserButton afterSignOutUrl="/" />
-        </div>
-      </header>
-
-      {/* Main Content */}
-      <main className="flex-1 max-w-6xl w-full mx-auto p-6 md:p-8 flex flex-col gap-6">
-        {/* Mobile Search input */}
-        <div className="relative w-full sm:hidden">
-          <Search className="absolute left-3 top-2.5 h-4.5 w-4.5 text-brand-muted" />
-          <input
-            type="text"
-            placeholder="Search documents..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-brand-card border border-brand-border rounded-lg pl-10 pr-4 py-2 text-sm text-brand-text placeholder:text-brand-muted focus:outline-none focus:border-brand-accent transition-colors"
-          />
-        </div>
-
-        {/* Actions Bar */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight text-white">Your Documents</h1>
-            <p className="text-sm text-brand-muted mt-1">Upload and manage PDF files to start context queries.</p>
-          </div>
           <button
             onClick={() => setIsUploadOpen(true)}
-            className="bg-brand-accent hover:bg-brand-accent/90 text-white px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 transition-all duration-200 shadow-md shadow-brand-accent/15"
+            className="bg-brand-accent hover:bg-brand-accent/90 text-black px-4 py-2 rounded-md text-xs font-mono uppercase tracking-wider font-semibold flex items-center gap-2 transition-all duration-150"
           >
-            <Plus className="h-4.5 w-4.5" />
+            <Plus className="h-4 w-4" />
             Upload PDF
           </button>
-        </div>
+        </header>
 
-        {/* Documents Grid / States */}
-        {isLoading && documents.length === 0 ? (
-          <div className="flex-1 flex flex-col items-center justify-center py-20">
-            <Loader2 className="h-10 w-10 animate-spin text-brand-accent" />
-            <span className="text-sm text-brand-muted mt-4">Loading your database documents...</span>
-          </div>
-        ) : filteredDocuments.length === 0 ? (
-          <div className="border border-dashed border-brand-border rounded-xl p-12 text-center flex flex-col items-center justify-center bg-brand-card/10">
-            <FileText className="h-12 w-12 text-brand-muted mb-4" />
-            <h3 className="text-lg font-semibold text-white">No documents found</h3>
-            <p className="text-sm text-brand-muted max-w-sm mt-2">
-              {searchQuery ? `No files match the query "${searchQuery}"` : "Get started by uploading your first document."}
+        {/* Content Body */}
+        <main className="flex-1 max-w-6xl w-full mx-auto px-8 py-8 flex flex-col gap-6">
+          <div>
+            <h1 className="text-xl font-serif text-brand-text">Document Corpus</h1>
+            <p className="text-xs font-mono uppercase tracking-wider text-brand-muted mt-1">
+              Factual lookup and semantic vector matching logs
             </p>
-            {!searchQuery && (
-              <button
-                onClick={() => setIsUploadOpen(true)}
-                className="mt-6 bg-brand-accent hover:bg-brand-accent/90 px-4 py-2 rounded-lg text-sm font-semibold transition-colors"
-              >
-                Upload File
-              </button>
-            )}
           </div>
-        ) : (
-          <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-6">
-            {filteredDocuments.map((doc) => {
-              const isCompleted = doc.status === 'COMPLETED';
-              const isProcessing = doc.status === 'PENDING' || doc.status === 'PROCESSING';
-              const isFailed = doc.status === 'FAILED';
 
-              return (
-                <div
-                  key={doc.id}
-                  onClick={() => isCompleted && onSelectDocument(doc)}
-                  className={`border border-brand-border bg-brand-card/40 rounded-xl p-5 flex flex-col gap-4 transition-all duration-200 ${
-                    isCompleted 
-                      ? 'hover:border-brand-accent hover:bg-brand-card/80 cursor-pointer hover:shadow-lg hover:shadow-brand-accent/5' 
-                      : 'opacity-85 cursor-not-allowed'
-                  }`}
+          {/* Loaders and Grid states */}
+          {isLoading && documents.length === 0 ? (
+            <div className="flex-1 flex flex-col items-center justify-center py-20">
+              <Loader2 className="h-6 w-6 animate-spin text-brand-accent" />
+              <span className="text-xs font-mono uppercase tracking-wider text-brand-muted mt-4">
+                Querying relational indices...
+              </span>
+            </div>
+          ) : filteredDocuments.length === 0 ? (
+            <div className="flex-1 flex flex-col items-center justify-center py-20 border border-dashed border-gray-800 rounded-md bg-[#141312]/20">
+              <FileUp className="h-10 w-10 text-brand-muted mb-4 stroke-1" />
+              <h3 className="text-lg font-serif text-brand-text">No documents yet</h3>
+              <p className="text-xs font-mono text-brand-muted mt-1.5 max-w-xs text-center leading-relaxed">
+                {searchQuery
+                  ? `Zero documents found matching your filter request.`
+                  : `Ingest your first PDF document to build the semantic embeddings context.`}
+              </p>
+              {!searchQuery && (
+                <button
+                  onClick={() => setIsUploadOpen(true)}
+                  className="mt-6 border border-brand-accent/40 hover:bg-brand-accent/5 text-brand-accent px-4 py-2 rounded-md text-xs font-mono uppercase tracking-wider transition-all duration-150"
                 >
-                  <div className="flex items-start justify-between">
-                    <div className="h-10 w-10 rounded-lg bg-brand-accent/10 flex items-center justify-center text-brand-accent border border-brand-accent/10">
-                      <FileText className="h-5 w-5" />
+                  Upload File
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {filteredDocuments.map((doc) => {
+                const isCompleted = doc.status === 'COMPLETED';
+                const isProcessing = doc.status === 'PENDING' || doc.status === 'PROCESSING';
+                const isFailed = doc.status === 'FAILED';
+
+                // Status border and label styles based on design guidelines
+                let borderStyle = 'border-l-2 border-l-gray-700';
+                let labelStyle = 'text-gray-500';
+                let label = 'Unknown';
+
+                if (isCompleted) {
+                  borderStyle = 'border-l-2 border-l-brand-accent';
+                  labelStyle = 'text-brand-accent';
+                  label = 'Ready';
+                } else if (isProcessing) {
+                  borderStyle = 'border-l-2 border-l-brand-accent animate-pulse';
+                  labelStyle = 'text-brand-accent/70';
+                  label = 'Processing';
+                } else if (isFailed) {
+                  borderStyle = 'border-l-2 border-l-red-500';
+                  labelStyle = 'text-red-500';
+                  label = 'Failed';
+                }
+
+                return (
+                  <div
+                    key={doc.id}
+                    onClick={() => isCompleted && onSelectDocument(doc)}
+                    className={`bg-brand-card border border-gray-800 ${borderStyle} p-5 flex flex-col justify-between min-h-[140px] rounded-md transition-all duration-200 ${
+                      isCompleted
+                        ? 'hover:border-brand-accent/40 cursor-pointer'
+                        : 'opacity-70 cursor-not-allowed'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="min-w-0">
+                        <h3 className="font-medium text-brand-text truncate text-sm" title={doc.originalName}>
+                          {doc.originalName}
+                        </h3>
+                        <p className="text-[10px] font-mono text-gray-500 mt-1">
+                          {new Date(doc.createdAt).toLocaleDateString(undefined, {
+                            year: 'numeric',
+                            month: 'short',
+                            day: 'numeric'
+                          })}
+                        </p>
+                      </div>
+                      <span className={`text-[10px] font-mono uppercase tracking-wide shrink-0 ${labelStyle}`}>
+                        {label}
+                      </span>
                     </div>
 
-                    {/* Status Badge */}
-                    <div className="text-xs font-medium flex items-center gap-1.5 px-2.5 py-1 rounded-full border">
-                      {isCompleted && (
-                        <span className="text-emerald-400 bg-emerald-500/10 border-emerald-500/20 flex items-center gap-1">
-                          <CheckCircle className="h-3 w-3" /> Ready
-                        </span>
-                      )}
-                      {isProcessing && (
-                        <span className="text-indigo-400 bg-indigo-500/10 border-indigo-500/20 flex items-center gap-1 animate-pulse">
-                          <RefreshCw className="h-3 w-3 animate-spin" /> Processing
-                        </span>
-                      )}
-                      {isFailed && (
-                        <span className="text-rose-400 bg-rose-500/10 border-rose-500/20 flex items-center gap-1">
-                          <AlertCircle className="h-3 w-3" /> Failed
-                        </span>
-                      )}
-                    </div>
+                    {isCompleted && (
+                      <div className="text-[10px] font-mono text-brand-accent uppercase tracking-wider flex items-center gap-1.5 mt-4">
+                        <span>Query document</span>
+                        <span>&rarr;</span>
+                      </div>
+                    )}
                   </div>
+                );
+              })}
+            </div>
+          )}
+        </main>
+      </div>
 
-                  <div>
-                    <h3 className="font-semibold text-white truncate text-sm" title={doc.originalName}>
-                      {doc.originalName}
-                    </h3>
-                    <p className="text-xs text-brand-muted mt-1">
-                      Uploaded on {new Date(doc.createdAt).toLocaleDateString()}
-                    </p>
-                  </div>
-
-                  {isCompleted && (
-                    <div className="text-xs text-brand-accent font-semibold mt-2 flex items-center gap-1">
-                      Click to start Q&A &rarr;
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </main>
-
-      {/* Upload Modal */}
+      {/* Ingestion Dialog */}
       {isUploadOpen && (
         <UploadModal
           onClose={() => setIsUploadOpen(false)}
@@ -241,5 +230,3 @@ function Dashboard({ onSelectDocument }: DashboardProps) {
     </div>
   );
 }
-
-export default Dashboard;

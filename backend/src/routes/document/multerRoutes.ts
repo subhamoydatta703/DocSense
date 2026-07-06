@@ -3,9 +3,12 @@ import upload from "../../middlewares/multerMiddleware";
 import { uploadDocument } from "../../controllers/document/documentController";
 import { authMiddleware } from "../../middlewares/authMiddleware";
 import multer from "multer";
-import { deleteDocument, getDocuments } from "../../controllers/document/documentController";
+import { deleteDocument, getDocuments, getDocumentById } from "../../controllers/document/documentController";
 
 const router = Router();
+
+
+router.get("/documents/:id", authMiddleware, getDocumentById);
 
 router.get("/documents", authMiddleware, getDocuments);
 

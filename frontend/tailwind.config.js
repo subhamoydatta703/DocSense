@@ -1,4 +1,6 @@
 /** @type {import('tailwindcss').Config} */
+import typography from '@tailwindcss/typography';
+
 export default {
   content: [
     "./index.html",
@@ -8,18 +10,20 @@ export default {
     extend: {
       colors: {
         brand: {
-          bg: "#070a13",       // Very deep dark background
-          card: "#0f1322",     // Deep slate-zinc card background
-          accent: "#4f46e5",   // Solid indigo accent
-          border: "#1e293b",   // Crisp slate border
-          text: "#f8fafc",     // Clean off-white text
-          muted: "#94a3b8",    // Muted slate text
+          bg: "#0A0A0B",       // Warm near-black background
+          card: "#141312",     // Dark warm charcoal card background
+          accent: "#E8A33D",   // Warm amber/gold accent
+          border: "#1F1F22",   // Subtle border color
+          text: "#F5F3EE",     // Off-white text
+          muted: "#A09F9C",    // Muted text color
         }
       },
       fontFamily: {
         sans: ['Inter', 'system-ui', 'sans-serif'],
+        serif: ['Fraunces', 'Instrument Serif', 'Georgia', 'serif'],
+        mono: ['JetBrains Mono', 'IBM Plex Mono', 'Courier New', 'monospace'],
       }
     },
   },
-  plugins: [],
+  plugins: [typography],
 }

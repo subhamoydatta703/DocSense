@@ -1,24 +1,30 @@
 // import { Prisma } from "@prisma/client";
 import { prisma } from "../../config/db/db";
-
+import { randomUUID } from "crypto";
 
 //   Create a DocumentChunk with its embedding
 
 export const createVector = async (
+
   documentId: string,
   content: string,
   chunkIndex: number,
   embedding: number[]
 ) => {
+
+  const id = randomUUID();
   const vectorStr = `[${embedding.join(",")}]`;
+
   await prisma.$executeRaw`
     INSERT INTO "DocumentChunk" (
+      "id",
       "documentId",
       "content",
       "chunkIndex",
       "embedding"
     )
     VALUES (
+    ${id},
       ${documentId},
       ${content},
       ${chunkIndex},
@@ -28,7 +34,7 @@ export const createVector = async (
 };
 
 
-//  * Get all chunks of a document
+//   Get all chunks of a document
 
 export const getVectorsByDocumentId = async (
   documentId: string
