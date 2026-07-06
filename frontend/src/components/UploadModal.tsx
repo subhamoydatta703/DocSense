@@ -111,11 +111,11 @@ function UploadModal({ onClose, onSuccess }: UploadModalProps) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
       {/* Modal Card */}
-      <div className="w-full max-w-lg bg-brand-card border border-brand-border rounded-xl shadow-2xl overflow-hidden flex flex-col">
+      <div className="w-full max-w-lg bg-white dark:bg-brand-card border border-stone-200 dark:border-gray-800 rounded-xl shadow-2xl overflow-hidden flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-brand-border px-6 py-4">
-          <h2 className="text-lg font-semibold text-white">Upload Document</h2>
-          <button onClick={onClose} className="text-brand-muted hover:text-white transition-colors">
+        <div className="flex items-center justify-between border-b border-stone-200 dark:border-gray-800 px-6 py-4">
+          <h2 className="text-lg font-semibold text--[#1A1815] dark:text-white">Upload Document</h2>
+          <button onClick={onClose} className="text-stone-500 hover:text-[#1A1815] dark:text-brand-muted dark:hover:text-white transition-colors">
             <X className="h-5 w-5" />
           </button>
         </div>
@@ -131,8 +131,8 @@ function UploadModal({ onClose, onSuccess }: UploadModalProps) {
             onClick={() => inputRef.current?.click()}
             className={`border-2 border-dashed rounded-xl p-8 text-center flex flex-col items-center justify-center gap-3 cursor-pointer transition-all duration-200 ${
               dragActive 
-                ? 'border-brand-accent bg-brand-accent/5' 
-                : 'border-brand-border hover:border-brand-accent/40 bg-brand-bg/20'
+                ? 'border-[#C4791F] dark:border-brand-accent bg-[#C4791F]/5 dark:bg-brand-accent/5' 
+                : 'border-stone-200 dark:border-brand-border hover:border-[#C4791F]/45 dark:hover:border-brand-accent/40 bg-stone-50/50 dark:bg-brand-bg/20'
             }`}
           >
             <input
@@ -144,22 +144,23 @@ function UploadModal({ onClose, onSuccess }: UploadModalProps) {
               disabled={isUploading}
             />
 
-            <Upload className="h-10 w-10 text-brand-muted" />
+            <Upload className="h-10 w-10 text-stone-400 dark:text-brand-muted" />
             
             {file ? (
-              <div className="flex items-center gap-2 text-white font-medium text-sm">
-                <FileText className="h-4.5 w-4.5 text-brand-accent" />
+              <div className="flex items-center gap-2 text-[#1A1815] dark:text-white font-medium text-sm">
+                <FileText className="h-4.5 w-4.5 text-[#C4791F] dark:text-brand-accent" />
                 <span className="truncate max-w-xs">{file.name}</span>
-                <span className="text-xs text-brand-muted font-normal">
+                <span className="text-xs text-stone-500 dark:text-brand-muted font-normal">
                   ({(file.size / 1024 / 1024).toFixed(2)} MB)
                 </span>
               </div>
             ) : (
               <div>
-                <p className="text-sm font-medium text-white">Drag & drop your PDF file here, or click to browse</p>
-                <p className="text-xs text-brand-muted mt-2">Only PDF documents up to 5MB and 100 pages are supported.</p>
+                <p className="text-sm font-medium text-[#1A1815] dark:text-white">Drag & drop your PDF file here, or click to browse</p>
+                <p className="text-xs text-stone-500 dark:text-brand-muted mt-2">Only PDF documents up to 5MB and 100 pages are supported.</p>
               </div>
             )}
+
           </div>
 
           {/* Validation Error Alert */}
@@ -175,14 +176,14 @@ function UploadModal({ onClose, onSuccess }: UploadModalProps) {
             <button
               onClick={onClose}
               disabled={isUploading}
-              className="px-4 py-2 border border-brand-border hover:border-brand-text/20 rounded-lg text-sm font-semibold transition-colors disabled:opacity-50"
+              className="px-4 py-2 border border-stone-200 dark:border-brand-border hover:border-stone-300 dark:hover:border-brand-text/20 rounded-lg text-[#1A1815] dark:text-brand-muted text-sm font-semibold transition-colors disabled:opacity-50"
             >
               Cancel
             </button>
             <button
               onClick={handleUploadSubmit}
               disabled={!file || isUploading}
-              className="bg-brand-accent hover:bg-brand-accent/90 disabled:bg-brand-accent/50 text-white px-5 py-2 rounded-lg text-sm font-semibold transition-colors flex items-center gap-2"
+              className="bg-[#C4791F] dark:bg-brand-accent hover:opacity-90 disabled:opacity-50 text-white dark:text-black px-5 py-2 rounded-lg text-sm font-semibold transition-colors flex items-center gap-2"
             >
               {isUploading ? (
                 <>

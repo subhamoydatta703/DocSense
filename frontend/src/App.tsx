@@ -4,6 +4,7 @@ import { setAuthTokenGetter } from './api/apiClient';
 import LandingPage from './components/LandingPage';
 import Dashboard from './components/Dashboard';
 import QAWorkspace from './components/QAWorkspace';
+import { ThemeProvider } from './components/ThemeContext';
 
 export interface Document {
   id: string;
@@ -13,7 +14,7 @@ export interface Document {
   createdAt: string;
 }
 
-function App() {
+function MainApp() {
   const { isLoaded, isSignedIn, getToken } = useAuth();
   const [selectedDocument, setSelectedDocument] = useState<Document | null>(null);
 
@@ -25,7 +26,7 @@ function App() {
 
   if (!isLoaded) {
     return (
-      <div className="flex h-screen w-screen items-center justify-center bg-brand-bg text-brand-text">
+      <div className="flex h-screen w-screen items-center justify-center bg-[#FAF8F3] dark:bg-[#0A0A0B] text-[#1A1815] dark:text-[#F5F3EE]">
         <div className="h-8 w-8 animate-spin rounded-full border-4 border-brand-accent border-t-transparent"></div>
       </div>
     );
@@ -47,4 +48,10 @@ function App() {
   return <Dashboard onSelectDocument={setSelectedDocument} />;
 }
 
-export default App;
+export default function App() {
+  return (
+    <ThemeProvider>
+      <MainApp />
+    </ThemeProvider>
+  );
+}
