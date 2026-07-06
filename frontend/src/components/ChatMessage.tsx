@@ -67,7 +67,7 @@ export default function ChatMessage({ msg, onCitationClick }: ChatMessageProps) 
                 onClick={() => onCitationClick?.(cite)}
                 className="border-l-2 border-brand-accent bg-brand-accent/5 hover:bg-brand-accent/10 px-2.5 py-1 text-xs font-mono text-brand-accent transition-colors duration-150 focus:outline-none shrink-0"
               >
-                {cite}
+                {cite.replace(/chunk/i, 'Reference').replace(/[\[\]]/g, '')}
               </button>
             ))}
           </div>

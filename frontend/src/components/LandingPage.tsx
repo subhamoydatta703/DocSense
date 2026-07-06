@@ -32,14 +32,17 @@ export default function LandingPage() {
         {/* Landing Hero Section */}
         <section className="px-6 min-h-[85vh] flex flex-col items-center justify-center text-center max-w-5xl mx-auto py-12">
           <span className="text-[10px] font-mono uppercase tracking-widest text-brand-accent bg-brand-accent/5 border border-brand-accent/20 px-3 py-1 rounded-sm mb-6">
-            Document Ingestion & Retrieval Ingest
+            Intelligent Document Search & Q&A
           </span>
           <h1 className="text-4xl md:text-6xl font-serif text-[#F5F3EE] max-w-3xl leading-tight">
-            Verify everything. Hallucinate nothing.
+            Answers you can trust. Zero guesswork.
           </h1>
           <p className="mt-6 text-sm md:text-base text-brand-muted max-w-xl font-sans leading-relaxed">
-            Ingest PDFs, vectorize chunks, and run semantic RAG workflows on your private datasets with instant cited context highlights.
+            Upload reports, user guides, or business contracts. Ask questions in plain English and get reliable answers with clickable links back to the source text.
           </p>
+          <span className="text-[9px] font-mono text-gray-600 uppercase tracking-wider block mt-4">
+            Tech stack: pgvector database + custom semantic parser + BullMQ background queue
+          </span>
 
           {/* Core Technical Flow Diagram */}
           <div className="mt-16 flex flex-col md:flex-row items-center justify-between w-full max-w-2xl px-6 gap-8 md:gap-4 relative">
@@ -48,7 +51,8 @@ export default function LandingPage() {
               <div className="h-10 w-10 border border-gray-800 bg-[#141312] flex items-center justify-center text-brand-accent rounded">
                 <FileText className="h-4 w-4" />
               </div>
-              <span className="mt-3 text-[10px] font-mono uppercase tracking-wider text-brand-text">1. Ingest PDF</span>
+              <span className="mt-3 text-[10px] font-mono uppercase tracking-wider text-brand-text">1. Upload PDF</span>
+              <span className="text-[9px] font-mono text-gray-600 block mt-1">S3 INGESTION</span>
             </div>
 
             {/* Connecting Line 1 */}
@@ -59,7 +63,8 @@ export default function LandingPage() {
               <div className="h-10 w-10 border border-gray-800 bg-[#141312] flex items-center justify-center text-brand-accent rounded">
                 <Database className="h-4 w-4" />
               </div>
-              <span className="mt-3 text-[10px] font-mono uppercase tracking-wider text-brand-text">2. Vectorize Chunks</span>
+              <span className="mt-3 text-[10px] font-mono uppercase tracking-wider text-brand-text">2. Extract Content</span>
+              <span className="text-[9px] font-mono text-gray-600 block mt-1">PGVECTOR INDEXING</span>
             </div>
 
             {/* Connecting Line 2 */}
@@ -70,7 +75,8 @@ export default function LandingPage() {
               <div className="h-10 w-10 border border-gray-800 bg-[#141312] flex items-center justify-center text-brand-accent rounded">
                 <MessageSquare className="h-4 w-4" />
               </div>
-              <span className="mt-3 text-[10px] font-mono uppercase tracking-wider text-brand-text">3. Cited Answer</span>
+              <span className="mt-3 text-[10px] font-mono uppercase tracking-wider text-brand-text">3. Get Cited Answers</span>
+              <span className="text-[9px] font-mono text-gray-600 block mt-1">LLM ANSWER GENERATION</span>
             </div>
           </div>
 
@@ -94,7 +100,7 @@ export default function LandingPage() {
           <div className="max-w-5xl mx-auto">
             <div className="mb-12">
               <span className="text-[10px] font-mono uppercase tracking-widest text-brand-accent">Engineered Architecture</span>
-              <h2 className="text-2xl md:text-3xl font-serif text-brand-text mt-2">Robust RAG Pipeline</h2>
+              <h2 className="text-2xl md:text-3xl font-serif text-brand-text mt-2">Engineered for absolute accuracy</h2>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 w-full">
@@ -104,14 +110,14 @@ export default function LandingPage() {
                   <div className="h-10 w-10 border border-brand-accent/30 bg-brand-accent/5 flex items-center justify-center text-brand-accent rounded mb-6">
                     <ShieldCheck className="h-5 w-5" />
                   </div>
-                  <h3 className="text-xl font-serif text-brand-text">Semantic Citations Engine</h3>
-                  <p className="text-[10px] font-mono uppercase tracking-wider text-brand-accent mt-1.5">Verification & Ingestion</p>
+                  <h3 className="text-xl font-serif text-brand-text">Trustworthy references for every answer</h3>
+                  <p className="text-[10px] font-mono uppercase tracking-wider text-brand-accent mt-1.5">Instant Verification</p>
                   <p className="text-brand-muted text-sm leading-relaxed mt-4">
-                    Every answer returned by our query engine is linked directly to a verifiable chunk of source text. The pipeline extracts textual content from PDF files, hashes it into metadata blocks, vectors them with cosine indexing, and presents references alongside citations.
+                    Every answer is directly linked to the exact section of your document. You will never have to guess if the information is accurate—just click the source reference tag to see the exact text the AI read.
                   </p>
                 </div>
                 <div className="mt-8 text-[10px] font-mono text-gray-500 uppercase tracking-widest">
-                  Secure Data Sandboxing
+                  Pipeline: Cosine similarity matching on high-dimensional text embeddings
                 </div>
               </div>
 
@@ -121,9 +127,12 @@ export default function LandingPage() {
                   <div className="h-8 w-8 border border-gray-850 bg-black flex items-center justify-center text-brand-accent rounded mb-4">
                     <FileText className="h-4 w-4" />
                   </div>
-                  <h4 className="text-base font-serif text-brand-text">Granular PDF Parsing</h4>
+                  <h4 className="text-base font-serif text-brand-text">Smart Page Processing</h4>
                   <p className="text-brand-muted text-xs leading-relaxed mt-2">
-                    Splits multi-page documents into readable chunks with overlaps, ensuring full context is preserved across page breaks.
+                    Reads long reports and spreadsheets, breaking them down into clean segments so nothing gets lost between pages.
+                  </p>
+                  <p className="text-[9px] font-mono text-gray-600 mt-2">
+                    RecursiveCharacterTextSplitter (1000 chunk size, 200 overlap)
                   </p>
                 </div>
               </div>
@@ -134,9 +143,12 @@ export default function LandingPage() {
                   <div className="h-8 w-8 border border-gray-850 bg-black flex items-center justify-center text-brand-accent rounded mb-4">
                     <Search className="h-4 w-4" />
                   </div>
-                  <h4 className="text-base font-serif text-brand-text">Vector Distance Indexing</h4>
+                  <h4 className="text-base font-serif text-brand-text">Instant similarity searches</h4>
                   <p className="text-brand-muted text-xs leading-relaxed mt-2">
-                    Runs similarity match queries across database vectors, fetching matching passages in milliseconds.
+                    Searches your documents instantly using conceptual meaning, finding relevant paragraphs in a fraction of a second.
+                  </p>
+                  <p className="text-[9px] font-mono text-gray-600 mt-2">
+                    Mechanism: pgvector cosine similarity matching limit 5
                   </p>
                 </div>
               </div>
@@ -151,16 +163,19 @@ export default function LandingPage() {
               <span className="text-[10px] font-mono uppercase tracking-widest text-brand-accent">Mission Statement</span>
               <h2 className="text-2xl font-serif text-brand-text mt-2 mb-4">DocSense Philosophy</h2>
               <div className="text-3xl font-serif text-brand-accent leading-snug">
-                "Zero hallucination, by design."
+                "Answers grounded in actual facts."
               </div>
             </div>
 
             <div className="md:col-span-3 text-brand-muted text-sm leading-relaxed space-y-6">
               <p>
-                DocSense is a technical document intelligence workspace built to solve factual reliability issues. By anchoring generative answers strictly to custom vector context chunks (pgvector), we guarantee that all answers match actual document segments.
+                We built DocSense to solve the reliability problems of general AI assistants. Instead of guessing answers from pre-trained memory, DocSense searches the exact files you upload and constructs answers using only the sentences present in your files.
               </p>
               <p>
-                The backend is decoupled to scale seamlessly. A high-performance queue processor indexes document payloads in the background, allowing prompt queries to pull citations cleanly without blocking active server event threads.
+                Our background systems process your documents quickly in a secure sandbox, so you can upload a report and start asking questions immediately.
+              </p>
+              <p className="text-[10px] font-mono text-gray-600 leading-relaxed mt-2 pt-2 border-t border-gray-800">
+                Architecture details: Next-gen retrieval-augmented generation workflow, Postgres database, and Redis cache.
               </p>
             </div>
           </div>

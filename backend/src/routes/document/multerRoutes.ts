@@ -37,7 +37,7 @@ router.post("/upload", authMiddleware, (req, res, next) => {
     });
 });
 
-router.delete("/documents/:id", authMiddleware, deleteDocument);
+router.delete("/documents/:documentId", authMiddleware, deleteDocument);
 
 
 export default router;

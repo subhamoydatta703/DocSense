@@ -16,7 +16,7 @@ export default function QAWorkspace({ document, onBack }: QAWorkspaceProps) {
     {
       id: 'welcome',
       sender: 'ai',
-      text: `Hello. I have indexed **${document.originalName}** into semantic vector space. You can query any content blocks now. Answers are cited directly from the matching text segments below.`,
+      text: `Hello. I have read through **${document.originalName}** and it is ready — ask me anything about it. I will search the text to give you facts directly from the document.`,
       timestamp: new Date(),
     },
   ]);
@@ -75,12 +75,12 @@ export default function QAWorkspace({ document, onBack }: QAWorkspaceProps) {
         ]);
       }
     } catch (err: any) {
-      console.warn("Backend query failed. Simulating RAG response.");
+      console.warn("Backend query failed. Simulating response.");
       setTimeout(() => {
         const mockAnswers = [
-          `According to **[Chunk 1]**, this document's text is split into segments and indexed using PostgreSQL pgvector cosine similarity. This prevents LLM hallucinations.`,
-          `As described in **[Chunk 2]**, the ingestion pipeline enforces a strict 5MB limit for uploaded PDF documents to ensure low-latency vector search performance.`,
-          `Based on the context in **[Chunk 3]**, the model uses the source citations provided in the prompt to link every factual claim to its precise source index.`,
+          `According to **[Chunk 1]**, this document is split into individual paragraphs for search. This ensures responses stay accurate to the text.`,
+          `As described in **[Chunk 2]**, the uploader accepts documents under 5MB to guarantee instant response times.`,
+          `Based on the context in **[Chunk 3]**, the system links every claim back to the original text so you can verify the information.`,
         ];
         const randomAnswer = mockAnswers[Math.floor(Math.random() * mockAnswers.length)]!;
         const citations = parseCitations(randomAnswer);
@@ -130,7 +130,7 @@ export default function QAWorkspace({ document, onBack }: QAWorkspaceProps) {
           </div>
           <div className="text-[10px] font-mono uppercase tracking-wider text-brand-accent flex items-center gap-2">
             <span className="h-1.5 w-1.5 rounded-full bg-brand-accent animate-pulse"></span>
-            <span>Vector index ready</span>
+            <span>Ready to search</span>
           </div>
         </header>
 
@@ -158,7 +158,7 @@ export default function QAWorkspace({ document, onBack }: QAWorkspaceProps) {
                   </div>
                 </div>
                 <span className="text-[9px] font-mono text-gray-500 mt-1 uppercase tracking-wider">
-                  Querying vector database...
+                  Searching document pages...
                 </span>
               </div>
             )}
@@ -194,7 +194,8 @@ export default function QAWorkspace({ document, onBack }: QAWorkspaceProps) {
       {/* Right Document Info Inspector Panel */}
       <aside className="w-80 border-l border-gray-800 bg-[#0A0A0B] p-6 hidden lg:flex flex-col gap-6 shrink-0 h-full overflow-y-auto">
         <div>
-          <h2 className="text-[10px] font-mono uppercase tracking-wider text-brand-muted">Metadata Inspector</h2>
+          <h2 className="text-sm font-serif text-brand-text">Document Details</h2>
+          <span className="text-[9px] font-mono text-gray-500 uppercase tracking-widest block mt-0.5">METADATA INSPECTOR</span>
           <div className="mt-3 flex flex-col gap-4 bg-[#141312] border border-gray-800 rounded-md p-4 text-xs">
             <div>
               <span className="text-[10px] font-mono text-brand-muted uppercase block">Filename</span>
@@ -205,7 +206,7 @@ export default function QAWorkspace({ document, onBack }: QAWorkspaceProps) {
               <span className="text-brand-text font-mono text-[10px] break-all mt-1 block">{document.id}</span>
             </div>
             <div>
-              <span className="text-[10px] font-mono text-brand-muted uppercase block">Indexed Date</span>
+              <span className="text-[10px] font-mono text-brand-muted uppercase block">Upload Date</span>
               <span className="text-brand-text font-medium mt-1 block">
                 {new Date(document.createdAt).toLocaleString(undefined, {
                   year: 'numeric',
@@ -220,15 +221,16 @@ export default function QAWorkspace({ document, onBack }: QAWorkspaceProps) {
         </div>
 
         <div>
-          <h2 className="text-[10px] font-mono uppercase tracking-wider text-brand-muted">Retrieval Settings</h2>
+          <h2 className="text-sm font-serif text-brand-text">Verification Rules</h2>
+          <span className="text-[9px] font-mono text-gray-500 uppercase tracking-widest block mt-0.5">RETRIEVAL & CITATION CONFIG</span>
           <div className="mt-3 bg-[#141312] border border-gray-800 rounded-md p-4 text-xs text-brand-muted flex flex-col gap-3.5">
             <div className="flex gap-2">
               <CheckCircle className="h-4 w-4 text-brand-accent shrink-0 mt-0.5" />
-              <p className="leading-relaxed">Answers are generated strictly using retrieved context blocks.</p>
+              <p className="leading-relaxed">Answers are generated strictly from the sentences in your files.</p>
             </div>
             <div className="flex gap-2">
               <HelpCircle className="h-4 w-4 text-brand-accent shrink-0 mt-0.5" />
-              <p className="leading-relaxed">Citations are parsed using regex validation to ensure data alignment.</p>
+              <p className="leading-relaxed">Each claim is verified by a traceable reference back to the source.</p>
             </div>
           </div>
         </div>
