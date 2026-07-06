@@ -21,6 +21,13 @@ export const processDocumentService = async (documentId: string) => {
         // 2. chunk
         const chunks = await createChunks(documentId)
 
+        // limit chunks
+        if (chunks.length > 500) {
+            throw new Error(
+                "Document is too large."
+            );
+        }
+
         // 3. embedding & store vectors in db by using batch where 5 chunks are embedded at the same time: it is more optimized way
         const batch = []
 

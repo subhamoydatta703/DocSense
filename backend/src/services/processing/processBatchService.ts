@@ -2,6 +2,7 @@ import { createEmbeddings } from "./embeddingService";
 import { createVector } from "../vectors/vectorService";
 
 
+
 export const processBatch = async (batch: any[], documentId: string) => {
     try {
         await Promise.all(

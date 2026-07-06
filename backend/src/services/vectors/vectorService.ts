@@ -46,17 +46,30 @@ export const getVectorsByDocumentId = async (
 
 export const searchSimilarVectors = async (
   embedding: number[],
+  userId: string,
+  documentId?: string,
   limit: number = 5
 ) => {
-  const result = await prisma.$queryRaw`
+    if (documentId) {
+    return await prisma.$queryRaw`
+      SELECT dc.*, d."originalName" AS "documentName",
+             dc.embedding <=> ${embedding}::vector AS distance
+      FROM "DocumentChunk" dc
+      JOIN "Document" d ON dc."documentId" = d.id
+      WHERE d."userId" = ${userId} AND d.id = ${documentId}
+      ORDER BY distance ASC
+      LIMIT ${limit};
+    `;
+  }
+  return await prisma.$queryRaw`
     SELECT dc.*, d."originalName" AS "documentName",
            dc.embedding <=> ${embedding}::vector AS distance
     FROM "DocumentChunk" dc
     JOIN "Document" d ON dc."documentId" = d.id
+    WHERE d."userId" = ${userId}
     ORDER BY distance ASC
     LIMIT ${limit};
   `;
-  return result;
 };
 
 

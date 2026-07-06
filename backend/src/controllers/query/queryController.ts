@@ -6,12 +6,16 @@ export const queryController = async (req: AuthenticatedRequest, res: Response) 
 
         //  user ask question in frontend input box
         // 1. use  req. value and get the value of the input
-        if(!req.body.query){
+        if(!req.body){
             throw new Error("Please provide a query") ;
         }
-        const {query} = req.body;
+
+        if(!req.userId){
+            throw new Error("No user id found")
+        }
+        const {query, documentId} = req.body;
         // 2. call query service to get the answer
-        const answer = await userQueryService(query);
+        const answer = await userQueryService(query, req.userId, documentId);
         // 3. return the response thqat will show in the frontend 
         return res.status(200).json({
             success: true,
