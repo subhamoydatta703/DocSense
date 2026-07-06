@@ -2,9 +2,8 @@
 // it is an orchestrator 
 
 import { createChunks } from "./chunkService";
-import { createEmbeddings } from "./embeddingService";
-import { prisma } from "../../config/db";
-import { createVector } from "../vectors/vectorService";
+import { prisma } from "../../config/db/db";
+import { processBatch } from "./processBatchService";
 
 
 export const processDocumentService = async (documentId: string) => {
@@ -22,18 +21,22 @@ export const processDocumentService = async (documentId: string) => {
         // 2. chunk
         const chunks = await createChunks(documentId)
 
-        // 3. embedding & store vectors in db
-        for (const [index, chunk] of chunks.entries()) {
-            const vectorData = await createEmbeddings(chunk);
+        // 3. embedding & store vectors in db by using batch where 5 chunks are embedded at the same time: it is more optimized way
+        const batch = []
 
-            await createVector(
-                documentId,
-                chunk,
-                index,
-                vectorData
-            );
+        for (const [index, chunk] of chunks.entries()) {
+            batch.push({ chunk, index });
+            if (batch.length === 5) {
+                await processBatch(batch, documentId)
+
+                batch.length = 0;
+            }
         }
 
+        if (batch.length > 0) {
+            await processBatch(batch, documentId)
+
+        }
 
         // 4. update document status to complete
         await prisma.document.update({

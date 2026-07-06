@@ -1,4 +1,4 @@
-import { prisma } from "../../config/db";
+import { prisma } from "../../config/db/db";
 
 
 //   Create a DocumentChunk with its embedding

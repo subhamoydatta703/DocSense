@@ -1,5 +1,5 @@
-import {getFile} from "../storage/s3storageService";
-import {prisma} from "../../config/db";
+import { getFile } from "../storage/s3storageService";
+import { prisma } from "../../config/db/db";
 import { extractPDFText } from "../../utils/pdfParser";
 
 
@@ -11,13 +11,13 @@ export const getParsedData = async (fileId: string): Promise<String> => {
             where: { id: fileId },
             select: { s3Key: true },
         });
-        if(!document){
+        if (!document) {
             throw new Error("Document not found");
         }
         const data = await getFile(document.s3Key);
-        const parsedData=await extractPDFText(data);
+        const parsedData = await extractPDFText(data);
         console.log("Parsed data: ", parsedData);
-        
+
         return parsedData;
     } catch (error) {
         console.error("Error getting file:", error);

@@ -1,7 +1,4 @@
-import { GoogleGenAI } from "@google/genai";
-
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-
+import { ai } from "../../config/ai/ai";
 interface RetrievedChunk {
     id: string;
     content: string;

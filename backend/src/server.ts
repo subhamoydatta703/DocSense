@@ -1,7 +1,7 @@
 import "dotenv/config";
 import app from "./app";
-import { connectRedis } from "../src/config/redisCaching";
-import { verifyBullMQConnection } from "../src/config/redisBullMQ";
+import { connectRedis } from "./config/redis/redisCaching";
+import { verifyBullMQConnection } from "./config/redis/redisBullMQ";
 import { startWorker } from "../src/services/worker/workerService";
 
 const PORT = process.env.PORT || 5000;

@@ -1,6 +1,6 @@
 import express from "express";
 import cors from "cors";
-import { prisma } from "./config/db";
+import { prisma } from "./config/db/db";
 import { clerkMiddleware } from "@clerk/express";
 import uploadRoutes from "./routes/document/multerRoutes";
 import queryRoutes from "./routes/query/queryRoutes";

@@ -1,7 +1,7 @@
 import { Worker } from "bullmq";
-import { bullRedisConnection } from "../../config/redisBullMQ";
+import { bullRedisConnection } from "../../config/redis/redisBullMQ";
 // import { analyzeThisdocument } from "./documentAnalysisService";
-import { workerPrisma } from "../../config/workerDB";
+import { workerPrisma } from "../../config/db/workerDB";
 import { processDocumentService } from "../processing/processDocumentService";
 
 let worker: Worker;
@@ -31,9 +31,9 @@ export async function startWorker() {
       console.log("PROCESSING status updated");
 
 
-    // analyzing by calling ai function call here
-    await processDocumentService(documentId);
-    
+      // analyzing by calling ai function call here
+      await processDocumentService(documentId);
+
 
       console.log("analyze this document completed");
     },
@@ -57,13 +57,13 @@ export async function startWorker() {
   });
 
   worker.on("failed", async (job, err) => {
-    
+
     console.error("JOB FAILED");
     console.error("Job ID:", job?.id);
     console.error("Document ID:", job?.data?.documentId);
     console.error("Error Message:", err.message);
     console.error("Error Stack:", err.stack);
-    
+
 
     if (job?.data?.documentId) {
       try {

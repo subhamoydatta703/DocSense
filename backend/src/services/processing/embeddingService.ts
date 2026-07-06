@@ -1,12 +1,12 @@
-import { GoogleGenAI } from "@google/genai";
+import { aiEmbedding } from "../../config/ai/ai";
 
 
 // get embedding from chunk
 export const createEmbeddings = async (chunk: string): Promise<number[]> => {
     try{
-        const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_EMBEDDING_API_KEY });
+       
 
-    const response = await ai.models.embedContent({
+    const response = await aiEmbedding.models.embedContent({
         model: 'gemini-embedding-2',
         contents: chunk,
         config: { outputDimensionality: 768 },

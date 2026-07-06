@@ -1,5 +1,5 @@
-import { prisma, Prisma } from "../../config/db";
-import { redisClient } from "../../config/redisCaching";
+import { prisma, Prisma } from "../../config/db/db";
+import { redisClient } from "../../config/redis/redisCaching";
 import { CreateDocumentSchema } from "../../utils/validation";
 import { deleteFile } from "../storage/s3storageService";
 import { deleteVectorsByDocumentId } from "../vectors/vectorService";
@@ -109,14 +109,14 @@ export const deleteDocumentService = async (DocumentID: string, userId: string) 
     console.error("Error deleting from S3 during delete service: ", err);
   }
 
-// delete chunks
-try {
-  await deleteVectorsByDocumentId(DocumentID);
-  
-} catch (error) {
-  console.error("Error deleting vectors from DB during delete service: ", error);
-  throw error;
-}
+  // delete chunks
+  try {
+    await deleteVectorsByDocumentId(DocumentID);
+
+  } catch (error) {
+    console.error("Error deleting vectors from DB during delete service: ", error);
+    throw error;
+  }
 
 
   return await prisma.document.delete({

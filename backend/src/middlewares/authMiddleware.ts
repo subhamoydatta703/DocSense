@@ -1,6 +1,6 @@
 import type { Request, Response, NextFunction } from "express";
 import { clerkClient, getAuth } from "@clerk/express";
-import { prisma } from "../config/db";
+import { prisma } from "../config/db/db";
 import { CreatedUserSchema } from "../utils/validation";
 
 export interface AuthenticatedRequest extends Request {
@@ -9,26 +9,26 @@ export interface AuthenticatedRequest extends Request {
 
 export async function authMiddleware(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
-    
+
     // // DEV ONLY: mock auth bypass
     // if (process.env.NODE_ENV === "development" && req.headers["x-mock-user-id"]) {
-  // const mockId = req.headers["x-mock-user-id"] as string;
-  
-  // // Ensure mock user exists in DB
-  // await prisma.user.upsert({
+    // const mockId = req.headers["x-mock-user-id"] as string;
+
+    // // Ensure mock user exists in DB
+    // await prisma.user.upsert({
     // where: { id: mockId },
     // update: {},
     // create: { id: mockId, email: "mockuser@test.com" }
-  // });
+    // });
 
-  // req.userId = mockId;
-  // return next();
-// }
-    
+    // req.userId = mockId;
+    // return next();
+    // }
+
     const { userId } = getAuth(req);
     if (!userId) {
-      return res.status(401).json({ 
-        success: false, 
+      return res.status(401).json({
+        success: false,
         message: "Unauthorized: Missing authentication credentials"
       });
     }
@@ -43,7 +43,7 @@ export async function authMiddleware(req: AuthenticatedRequest, res: Response, n
       try {
         const clerkUser = await clerkClient.users.getUser(userId);
         const email = clerkUser.emailAddresses[0]?.emailAddress || `${userId}@example.com`;
-        
+
         const validatedUser = CreatedUserSchema.parse({
           id: userId,
           email: email,
@@ -70,8 +70,8 @@ export async function authMiddleware(req: AuthenticatedRequest, res: Response, n
     next();
   } catch (error) {
     console.error("Authentication middleware error:", error);
-    res.status(500).json({ 
-      success: false, 
+    res.status(500).json({
+      success: false,
       message: "Internal Server Error in authentication"
     });
   }
