@@ -21,14 +21,14 @@ export async function startWorker() {
         throw new Error("Invalid or missing file ID");
       }
 
-      console.log("About to update status to PROCESSING");
+      // console.log("About to update status to PROCESSING");
 
-      await workerPrisma.document.update({
-        where: { id: documentId },
-        data: { status: "PROCESSING" },
-      });
+      // await workerPrisma.document.update({
+      //   where: { id: documentId },
+      //   data: { status: "PROCESSING" },
+      // });
 
-      console.log("PROCESSING status updated");
+      // console.log("PROCESSING status updated");
 
 
       // analyzing by calling ai function call here

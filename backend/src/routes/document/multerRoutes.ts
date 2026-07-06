@@ -1,10 +1,14 @@
 import { Router } from "express";
 import upload from "../../middlewares/multerMiddleware";
-import { uploadDocument } from "../../controllers/document/uploadDocumentController";
+import { uploadDocument } from "../../controllers/document/documentController";
 import { authMiddleware } from "../../middlewares/authMiddleware";
 import multer from "multer";
+import { deleteDocument, getDocuments } from "../../controllers/document/documentController";
 
 const router = Router();
+
+router.get("/documents", authMiddleware, getDocuments);
+
 
 router.post("/upload", authMiddleware, (req, res, next) => {
     upload.single("document")(req, res, (err) => {
@@ -29,5 +33,8 @@ router.post("/upload", authMiddleware, (req, res, next) => {
         uploadDocument(req, res);
     });
 });
+
+router.delete("/documents/:id", authMiddleware, deleteDocument);
+
 
 export default router;

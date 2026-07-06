@@ -54,13 +54,13 @@ export const processDocumentService = async (documentId: string) => {
         });
     } catch (error) {
 
-        // 5. update document status to failed
-        await prisma.document.update({
-            where: { id: documentId },
-            data: {
-                status: "FAILED",
-            },
-        });
+        // // 5. update document status to failed
+        // await prisma.document.update({
+        //     where: { id: documentId },
+        //     data: {
+        //         status: "FAILED",
+        //     },
+        // });
         console.error("Error in processDocumentService: ", error)
         throw error
     }

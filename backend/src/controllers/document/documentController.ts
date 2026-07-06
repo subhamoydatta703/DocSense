@@ -3,7 +3,9 @@ import { createFileDB } from "../../services/document/uploadDocumentService";
 import { uploadFile } from "../../services/storage/s3storageService";
 import type { AuthenticatedRequest } from "../../middlewares/authMiddleware";
 import { DocumentQueue } from "../../queue/documentQueue";
+import { prisma } from "../../config/db/db";
 
+// upload document
 export const uploadDocument = async (req: AuthenticatedRequest, res: Response) => {
   try {
     if (!req.file) {
@@ -61,3 +63,54 @@ export const uploadDocument = async (req: AuthenticatedRequest, res: Response) =
     });
   }
 };
+
+
+// get documents
+export const getDocuments = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const userId = req.userId!;
+
+    const documents = await prisma.document.findMany({
+      where: { userId },
+      orderBy: { createdAt: "desc" },
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Documents fetched successfully",
+      documents,
+    });
+  } catch (error) {
+    console.error("getDocuments controller error ", error);
+    return res.status(500).json({
+      success: false,
+      message: "getDocuments controller error",
+    });
+  }
+};
+
+
+// delete document
+export const deleteDocument = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const userId = req.userId!;
+    const documentId = req.params.documentId as string;
+
+    
+
+    await prisma.document.delete({
+      where: { id: documentId, userId: userId },
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Document deleted successfully",
+    });
+  } catch (error) {
+    console.error("deleteDocument controller error ", error);
+    return res.status(500).json({
+      success: false,
+      message: "deleteDocument controller error",
+    });
+  }
+}

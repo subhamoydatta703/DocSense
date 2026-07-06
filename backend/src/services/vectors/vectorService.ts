@@ -1,3 +1,4 @@
+// import { Prisma } from "@prisma/client";
 import { prisma } from "../../config/db/db";
 
 
@@ -9,6 +10,7 @@ export const createVector = async (
   chunkIndex: number,
   embedding: number[]
 ) => {
+  const vectorStr = `[${embedding.join(",")}]`;
   await prisma.$executeRaw`
     INSERT INTO "DocumentChunk" (
       "documentId",
@@ -20,7 +22,7 @@ export const createVector = async (
       ${documentId},
       ${content},
       ${chunkIndex},
-      ${embedding}::vector
+      ${vectorStr}::vector
     );
   `;
 };
@@ -50,10 +52,11 @@ export const searchSimilarVectors = async (
   documentId?: string,
   limit: number = 5
 ) => {
-    if (documentId) {
+  const vectorStr = `[${embedding.join(",")}]`;
+  if (documentId) {
     return await prisma.$queryRaw`
       SELECT dc.*, d."originalName" AS "documentName",
-             dc.embedding <=> ${embedding}::vector AS distance
+             dc.embedding <=> ${vectorStr}::vector AS distance
       FROM "DocumentChunk" dc
       JOIN "Document" d ON dc."documentId" = d.id
       WHERE d."userId" = ${userId} AND d.id = ${documentId}
@@ -63,7 +66,7 @@ export const searchSimilarVectors = async (
   }
   return await prisma.$queryRaw`
     SELECT dc.*, d."originalName" AS "documentName",
-           dc.embedding <=> ${embedding}::vector AS distance
+           dc.embedding <=> ${vectorStr}::vector AS distance
     FROM "DocumentChunk" dc
     JOIN "Document" d ON dc."documentId" = d.id
     WHERE d."userId" = ${userId}
@@ -79,9 +82,10 @@ export const updateVector = async (
   chunkId: string,
   embedding: number[]
 ) => {
+  const vectorStr = `[${embedding.join(",")}]`;
   await prisma.$executeRaw`
     UPDATE "DocumentChunk"
-    SET embedding = ${embedding}::vector
+    SET embedding = ${vectorStr}::vector
     WHERE id = ${chunkId};
   `;
 };
