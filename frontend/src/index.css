@@ -20,4 +20,10 @@
     -ms-overflow-style: none;  /* IE and Edge */
     scrollbar-width: none;  /* Firefox */
   }
+
+  /* Disable default backticks added by Tailwind Typography prose class */
+  .prose code::before,
+  .prose code::after {
+    content: "" !important;
+  }
 }

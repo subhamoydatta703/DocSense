@@ -78,9 +78,9 @@ export default function QAWorkspace({ document, onBack }: QAWorkspaceProps) {
       console.warn("Backend query failed. Simulating response.");
       setTimeout(() => {
         const mockAnswers = [
-          `According to **[Chunk 1]**, this document is split into individual paragraphs for search. This ensures responses stay accurate to the text.`,
-          `As described in **[Chunk 2]**, the uploader accepts documents under 5MB to guarantee instant response times.`,
-          `Based on the context in **[Chunk 3]**, the system links every claim back to the original text so you can verify the information.`,
+          `This document is split into individual paragraphs for search. This ensures responses stay accurate and relevant to the text.`,
+          `The uploader accepts documents under 5MB to guarantee instant response times.`,
+          `The system links every claim back to the original text so you can verify the information directly from the source.`,
         ];
         const randomAnswer = mockAnswers[Math.floor(Math.random() * mockAnswers.length)]!;
         const citations = parseCitations(randomAnswer);
@@ -141,6 +141,7 @@ export default function QAWorkspace({ document, onBack }: QAWorkspaceProps) {
               <ChatMessage
                 key={msg.id}
                 msg={msg}
+                documentName={document.originalName}
                 onCitationClick={(citation) => {
                   setInputQuery((prev) => `${prev} Regarding ${citation}: `);
                 }}
