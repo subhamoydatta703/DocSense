@@ -127,11 +127,6 @@ export const deleteDocument = async (req: AuthenticatedRequest, res: Response) =
 
     
 
-    // Delete associated chunks first to satisfy foreign key constraint
-    await prisma.documentChunk.deleteMany({
-      where: { documentId: documentId },
-    });
-
     await prisma.document.delete({
       where: { id: documentId, userId: userId },
     });
