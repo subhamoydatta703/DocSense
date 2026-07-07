@@ -2,18 +2,19 @@ import { Router } from "express";
 import upload from "../../middlewares/multerMiddleware";
 import { uploadDocument } from "../../controllers/document/documentController";
 import { authMiddleware } from "../../middlewares/authMiddleware";
+import { rateLimiter } from "../../middlewares/rateLimiterMiddleware";
 import multer from "multer";
 import { deleteDocument, getDocuments, getDocumentById } from "../../controllers/document/documentController";
 
 const router = Router();
 
 
-router.get("/documents/:id", authMiddleware, getDocumentById);
+router.get("/documents/:id", authMiddleware, rateLimiter, getDocumentById);
 
-router.get("/documents", authMiddleware, getDocuments);
+router.get("/documents", authMiddleware, rateLimiter, getDocuments);
 
 
-router.post("/upload", authMiddleware, (req, res, next) => {
+router.post("/upload", authMiddleware, rateLimiter, (req, res, next) => {
     upload.single("document")(req, res, (err) => {
         if (err instanceof multer.MulterError) {
             if (err.code === "LIMIT_FILE_SIZE") {
@@ -37,7 +38,7 @@ router.post("/upload", authMiddleware, (req, res, next) => {
     });
 });
 
-router.delete("/documents/:documentId", authMiddleware, deleteDocument);
+router.delete("/documents/:documentId", authMiddleware, rateLimiter, deleteDocument);
 
 
 export default router;
