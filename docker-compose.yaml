@@ -1,3 +1,18 @@
+# Required Environment Variables in root .env file:
+# - DATABASE_URL (e.g., postgresql://postgres:postgres@db:5432/docsense?schema=public)
+# - WORKER_DATABASE_URL (e.g., postgresql://postgres:postgres@db:5432/docsense?schema=public)
+# - REDIS_URL (e.g., redis://redis:6379)
+# - BULLMQ_REDIS_URL (e.g., redis://redis:6379)
+# - CLERK_PUBLISHABLE_KEY (Backend Auth)
+# - CLERK_SECRET_KEY (Backend Auth)
+# - AWS_REGION (AWS S3)
+# - AWS_ACCESS_KEY_ID (AWS S3)
+# - AWS_SECRET_ACCESS_KEY (AWS S3)
+# - AWS_S3_BUCKET_NAME (AWS S3)
+# - GEMINI_API_KEY (AI Config)
+# - GEMINI_EMBEDDING_API_KEY (AI Config)
+# - VITE_CLERK_PUBLISHABLE_KEY (Frontend Auth)
+
 services:
   # Database with pgvector extension support
   db:
@@ -33,7 +48,7 @@ services:
       timeout: 5s
       retries: 5
 
-  # Node/Bun Backend API Service
+  # Bun Backend API Service (includes BullMQ Worker)
   backend:
     build:
       context: ./backend
@@ -41,32 +56,29 @@ services:
     container_name: docsense-backend
     restart: always
     ports:
-      - "3000:3000"
+      - "5000:5000"
     depends_on:
       db:
         condition: service_healthy
       redis:
         condition: service_healthy
-    environment:
-      - PORT=3000
-      - DATABASE_URL=postgresql://postgres:postgres@db:5432/docsense?schema=public
-      - REDIS_URL=redis://redis:6379
-      - BULLMQ_REDIS_URL=redis://redis:6379
-      - NODE_ENV=development # Change to production for live deploys
-      
-      # AWS S3 Storage Config (To be updated by user)
-      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-mock-key}
-      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-mock-secret}
-      - AWS_REGION=${AWS_REGION:-us-east-1}
-      - AWS_S3_BUCKET_NAME=${AWS_S3_BUCKET_NAME:-docsense-bucket}
+    env_file:
+      - .env
 
-      # AI/LLM Config (To be updated by user)
-      - GEMINI_EMBEDDING_API_KEY=${GEMINI_EMBEDDING_API_KEY}
-
-      # Authentication Config (To be updated by user)
-      - CLERK_PUBLISHABLE_KEY=${CLERK_PUBLISHABLE_KEY}
-      - CLERK_SECRET_KEY=${CLERK_SECRET_KEY}
-      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:5173}
+  # Frontend SPA Service (Nginx)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        - VITE_API_URL=http://localhost:5000/api
+        - VITE_CLERK_PUBLISHABLE_KEY=${VITE_CLERK_PUBLISHABLE_KEY}
+    container_name: docsense-frontend
+    restart: always
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
 
 volumes:
   postgres_data:
