@@ -74,9 +74,6 @@ export default function Sidebar({ activeItem, onNavigate, documentName }: Sideba
           <span className="text-xs font-medium text-[#1A1815] dark:text-[#F5F3EE] truncate">
             {user?.fullName || user?.primaryEmailAddress?.emailAddress.split('@')[0]}
           </span>
-          <span className="text-[10px] font-mono text-[#C4791F] dark:text-brand-accent uppercase tracking-wider">
-            Developer Plan
-          </span>
         </div>
       </div>
     </aside>
