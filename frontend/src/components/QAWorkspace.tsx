@@ -75,28 +75,20 @@ export default function QAWorkspace({ document, onBack }: QAWorkspaceProps) {
         ]);
       }
     } catch (err: any) {
-      console.warn("Backend query failed. Simulating response.");
+      console.warn("Backend query failed. Returning busy error.");
       setTimeout(() => {
-        const mockAnswers = [
-          `This document is split into individual paragraphs for search. This ensures responses stay accurate and relevant to the text.`,
-          `The uploader accepts documents under 5MB to guarantee instant response times.`,
-          `The system links every claim back to the original text so you can verify the information directly from the source.`,
-        ];
-        const randomAnswer = mockAnswers[Math.floor(Math.random() * mockAnswers.length)]!;
-        const citations = parseCitations(randomAnswer);
-
+        const errorMessage = "The AI server is busy right now. Please try again in a few moments.";
         setMessages((prev) => [
           ...prev,
           {
             id: crypto.randomUUID(),
             sender: 'ai',
-            text: randomAnswer,
+            text: errorMessage,
             timestamp: new Date(),
-            citations: citations.length > 0 ? citations : undefined,
           },
         ]);
         setIsLoading(false);
-      }, 1500);
+      }, 1000);
       return;
     }
 

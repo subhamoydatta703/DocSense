@@ -44,6 +44,9 @@ export default function ChatMessage({ msg, documentName, onCitationClick }: Chat
       .replace(/Source:\s*As described in/gi, '')
       .replace(/Source:\s*Based on the context in/gi, '')
       .replace(/Source:\s*$/gi, '')
+      // Clean up residue source/citation brackets left after chunk removal
+      .replace(/\(\s*Source:\s*(?:and|or|&|,|\s)*\)/gi, '')
+      .replace(/\[\s*Source:\s*(?:and|or|&|,|\s)*\]/gi, '')
       // General punctuation cleanup
       .replace(/\s*,\s*,/g, ',')
       // Collapse horizontal spaces only, keeping newlines to preserve list formatting
