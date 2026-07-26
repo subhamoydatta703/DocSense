@@ -2,12 +2,21 @@
 import { createEmbeddings } from "../processing/embeddingService"
 import { searchSimilarVectors } from "../vectors/vectorService";
 import { answerQuery } from "./answerGenerationService";
+import { optimizeQuery } from "./QueryOptimizationService";
 // import { createChunks } from "../processing/chunkService"
 export const userQueryService = async (userQuery: string, userId:string, documentId?: string) => {
 
     try {
+
+
+        // 0. call query optimization service and use it and thr retured value goes inside the next function calls
+        const optimizedQuery = await optimizeQuery(userQuery);
+        console.log(optimizeQuery);
+        
+
+
         // 1. get embedding of user query
-        const embeddedQuery = await createEmbeddings(userQuery);
+        const embeddedQuery = await createEmbeddings(optimizedQuery);
         // 2. rawquery call and get top 5 similar chunks from db
         const relatedChunks = await searchSimilarVectors(embeddedQuery, userId, documentId) as any[];
         // console.log("relatedChunks from user query service", relatedChunks);
