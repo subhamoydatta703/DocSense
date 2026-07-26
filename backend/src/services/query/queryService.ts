@@ -11,6 +11,8 @@ export const userQueryService = async (userQuery: string, userId:string, documen
 
         // 0. call query optimization service and use it and thr retured value goes inside the next function calls
         const optimizedQuery = await optimizeQuery(userQuery);
+        console.log(optimizeQuery);
+        
 
 
         // 1. get embedding of user query

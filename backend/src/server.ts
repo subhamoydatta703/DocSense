@@ -1,4 +1,8 @@
 import "dotenv/config";
+import * as dotenv from "dotenv";
+import * as path from "path";
+import { fileURLToPath } from 'url';
+dotenv.config({ path: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../.env'), override: true, quiet: true });
 import app from "./app";
 import { connectRedis } from "./config/redis/redisCaching";
 import { verifyBullMQConnection } from "./config/redis/redisBullMQ";
