@@ -2,7 +2,7 @@
 import { createEmbeddings } from "../processing/embeddingService"
 import { searchSimilarVectors } from "../vectors/vectorService";
 import { answerQuery } from "./answerGenerationService";
-import { optimizeQuery } from "./QueryOptimizationService";
+import { optimizeQuery } from "./queryOptimizationService";
 // import { createChunks } from "../processing/chunkService"
 export const userQueryService = async (userQuery: string, userId:string, documentId?: string) => {
 
