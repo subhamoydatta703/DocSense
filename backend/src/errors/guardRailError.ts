@@ -10,5 +10,6 @@ export class GuardrailError extends Error {
     ) {
         super(message);
         this.name = "GuardrailError";
+        Object.setPrototypeOf(this, GuardrailError.prototype);
     }
 }
