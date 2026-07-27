@@ -75,21 +75,19 @@ export default function QAWorkspace({ document, onBack }: QAWorkspaceProps) {
         ]);
       }
     } catch (err: any) {
-      console.warn("Backend query failed. Returning busy error.");
-      setTimeout(() => {
-        const errorMessage = "The AI server is busy right now. Please try again in a few moments.";
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: crypto.randomUUID(),
-            sender: 'ai',
-            text: errorMessage,
-            timestamp: new Date(),
-          },
-        ]);
-        setIsLoading(false);
-      }, 1000);
-      return;
+      const backendMessage = err?.response?.data?.message;
+      const errorMessage = backendMessage
+        ? backendMessage
+        : "The AI server is busy right now. Please try again in a few moments.";
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: crypto.randomUUID(),
+          sender: 'ai',
+          text: errorMessage,
+          timestamp: new Date(),
+        },
+      ]);
     }
 
     setIsLoading(false);

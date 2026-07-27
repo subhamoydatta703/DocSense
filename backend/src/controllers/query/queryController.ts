@@ -1,6 +1,7 @@
 import type { Response } from "express";
 import type { AuthenticatedRequest } from "../../middlewares/authMiddleware";
 import { userQueryService } from "../../services/query/queryService";
+import { GuardrailError } from "../../errors/guardRailError";
 export const queryController = async (req: AuthenticatedRequest, res: Response) => {
     try {
 
@@ -25,6 +26,13 @@ export const queryController = async (req: AuthenticatedRequest, res: Response) 
 
         
     } catch (error) {
+         if (error instanceof GuardrailError) {
+        return res.status(400).json({
+            success: false,
+            message: error.message,
+            category: error.category,
+        });
+    }
         console.error("Error in query controller: ", error);
         return res.status(500).json({
             success: false,

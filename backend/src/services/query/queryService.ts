@@ -3,16 +3,26 @@ import { createEmbeddings } from "../processing/embeddingService"
 import { searchSimilarVectors } from "../vectors/vectorService";
 import { answerQuery } from "./answerGenerationService";
 import { optimizeQuery } from "./queryOptimizationService";
+import { inputGuardrail } from "../../guardrails/input/inputGuard";
+import { GuardrailError } from "../../errors/guardRailError";
+import { outputGuardrail } from "../../guardrails/output/outputGuard";
 // import { createChunks } from "../processing/chunkService"
-export const userQueryService = async (userQuery: string, userId:string, documentId?: string) => {
+export const userQueryService = async (userQuery: string, userId: string, documentId?: string) => {
 
     try {
 
-
+        // guard against injection and other input guardrails
+        const guardResult = await inputGuardrail(userQuery);
+        if (!guardResult.safe) {
+            throw new GuardrailError(
+                guardResult.reason,
+                guardResult.category
+            );
+        }
         // 0. call query optimization service and use it and thr retured value goes inside the next function calls
         const optimizedQuery = await optimizeQuery(userQuery);
         console.log(optimizeQuery);
-        
+
 
 
         // 1. get embedding of user query
@@ -33,9 +43,20 @@ export const userQueryService = async (userQuery: string, userId:string, documen
         }
         // 5. ai call -> return result
         const answer = await answerQuery(userQuery, relevantChunks);
+
+        // 6. output guardrail
+        const outputGuardResult = await outputGuardrail(answer as string);
+        if (!outputGuardResult.safe) {
+            throw new GuardrailError(
+                outputGuardResult.reason,
+                outputGuardResult.category
+            );
+        }
+
         return answer;
 
     } catch (error) {
+        
         console.error("Error in user query service: ", error);
         throw error;
     }
