@@ -1,12 +1,11 @@
-import { error } from "node:console";
 import { aiGuard } from "../../config/ai/ai";
-import { type GuardrailCategory, type GuardrailResult } from "../types"
-import { buildGuardrailPrompt } from "./prompts/inputGuardPrompt";
+import { type InputGuardrailCategory, type InputGuardrailResult } from "./types"
+import { buildInputGuardrailPrompt } from "./prompts/inputGuardPrompt";
 
 
-export const inputGuardrail = async (userQuery: string): Promise<GuardrailResult> => {
+export const inputGuardrail = async (userQuery: string): Promise<InputGuardrailResult> => {
     try {
-        const prompt = buildGuardrailPrompt(userQuery);
+        const prompt = buildInputGuardrailPrompt(userQuery);
 
         const response = await aiGuard.models.generateContent({
             model: "gemini-3.1-pro-preview",

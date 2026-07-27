@@ -1,4 +1,4 @@
-export type GuardrailCategory =
+export type InputGuardrailCategory =
     | "SAFE"
     | "PROMPT_INJECTION"
     | "JAILBREAK"
@@ -6,8 +6,8 @@ export type GuardrailCategory =
     | "INSTRUCTION_OVERRIDE"
     | "ROLE_MANIPULATION";
 
-export interface GuardrailResult {
+export interface InputGuardrailResult {
     safe: boolean;
-    category: GuardrailCategory;
+    category: InputGuardrailCategory;
     reason: string;
 }
