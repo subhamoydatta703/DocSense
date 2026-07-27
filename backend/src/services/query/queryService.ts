@@ -5,6 +5,7 @@ import { answerQuery } from "./answerGenerationService";
 import { optimizeQuery } from "./queryOptimizationService";
 import { inputGuardrail } from "../../guardrails/input/inputGuard";
 import { GuardrailError } from "../../errors/guardRailError";
+import { outputGuardrail } from "../../guardrails/output/outputGuard";
 // import { createChunks } from "../processing/chunkService"
 export const userQueryService = async (userQuery: string, userId: string, documentId?: string) => {
 
@@ -42,6 +43,16 @@ export const userQueryService = async (userQuery: string, userId: string, docume
         }
         // 5. ai call -> return result
         const answer = await answerQuery(userQuery, relevantChunks);
+
+        // 6. output guardrail
+        const outputGuardResult = await outputGuardrail(answer as string);
+        if (!outputGuardResult.safe) {
+            throw new GuardrailError(
+                outputGuardResult.reason,
+                outputGuardResult.category
+            );
+        }
+
         return answer;
 
     } catch (error) {
