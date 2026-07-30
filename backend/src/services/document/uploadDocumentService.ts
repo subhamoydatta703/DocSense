@@ -3,7 +3,6 @@ import { redisClient } from "../../config/redis/redisCaching";
 import { CreateDocumentSchema } from "../../utils/validation";
 import { deleteFile } from "../storage/s3storageService";
 import { deleteVectorsByDocumentId } from "../vectors/vectorService";
-// import { redisClient } from "../config/redis.caching";
 
 export const createFileDB = async (
   s3Key: string,

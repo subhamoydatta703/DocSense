@@ -10,3 +10,14 @@ export const CreatedUserSchema = z.object({
   id: z.string().min(1, "ID is required"),
   email: z.string().email("Invalid email format"),
 });
+
+export const CreateWebUrlSchema = z.object({
+  url: z
+    .url("Invalid URL")
+    .refine((url) => {
+      const parsed = new URL(url);
+      return parsed.protocol === "https:";
+    }, {
+      message: "Only HTTPS URLs are allowed",
+    }),
+});
