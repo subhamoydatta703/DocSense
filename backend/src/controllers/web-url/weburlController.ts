@@ -1,10 +1,13 @@
-import puppeteer from 'puppeteer';
+
 import type { Response } from "express";
 import type { AuthenticatedRequest } from "../../middlewares/authMiddleware";
 import { webUrlContentService } from '../../services/web-url/weburlService';
 import { uploadFile } from '../../services/storage/s3storageService';
-import { createFileDB } from '../../services/document/uploadDocumentService';
+
 import { DocumentQueue } from '../../queue/documentQueue';
+import { createFileDBWebUrl } from '../../services/web-url/uploadWebUrlService';
+import { CreateWebUrlSchema } from '../../utils/validation';
+import z from 'zod';
 
 
 export const webUrlContent = async (req: AuthenticatedRequest, res: Response) => {
@@ -19,7 +22,9 @@ export const webUrlContent = async (req: AuthenticatedRequest, res: Response) =>
             });
         }
 
-        const { content, originalName } = await webUrlContentService(url);
+
+        const validated = CreateWebUrlSchema.parse({ url: req.body.url });
+        const { content, originalName } = await webUrlContentService(validated.url);
 
 
         const userId = req.userId!;
@@ -36,7 +41,7 @@ export const webUrlContent = async (req: AuthenticatedRequest, res: Response) =>
         const uploadedKey = await uploadFile(buffer, s3Key);
 
         // Save to DB
-        const fileData = await createFileDB(uploadedKey, originalName, userId);
+        const fileData = await createFileDBWebUrl(uploadedKey, originalName, validated.url, userId);
 
         console.log("fileData from upload document controller", JSON.stringify(fileData, null, 2));
 
@@ -69,6 +74,13 @@ export const webUrlContent = async (req: AuthenticatedRequest, res: Response) =>
         });
 
     } catch (error) {
+        if (error instanceof z.ZodError) {
+            return res.status(400).json({
+                success: false,
+                message: "Validation error",
+                errors: error.issues,
+            });
+        }
         console.error("webUrlContent controller error ", error);
         throw error;
     }

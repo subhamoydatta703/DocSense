@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Search, Plus, Loader2, FileUp, Trash2 } from 'lucide-react';
+import { Search, Plus, Loader2, FileUp, Trash2, Globe } from 'lucide-react';
 import { api } from '../api/apiClient';
 import type { Document } from '../App';
 import UploadModal from './UploadModal';
@@ -130,7 +130,7 @@ export default function Dashboard({ onSelectDocument }: DashboardProps) {
             className="bg-[#C4791F] dark:bg-brand-accent hover:opacity-90 text-white dark:text-black px-4 py-2 rounded-md text-xs font-mono uppercase tracking-wider font-semibold flex items-center gap-2 transition-all duration-150"
           >
             <Plus className="h-4 w-4" />
-            Upload PDF
+            Upload
           </button>
         </header>
 
@@ -207,20 +207,27 @@ export default function Dashboard({ onSelectDocument }: DashboardProps) {
                         : 'opacity-70 cursor-not-allowed'
                     }`}
                   >
-                    {/* Custom PDF Thumbnail Visual */}
-                    <div className="h-16 w-12 border border-stone-200 dark:border-gray-850 bg-[#FAF8F3] dark:bg-[#0A0A0B] rounded flex flex-col justify-between p-1.5 shrink-0 select-none relative group-hover:border-[#C4791F]/20 dark:group-hover:border-brand-accent/20 transition-colors">
-                      <div className="flex justify-between items-start">
-                        <span className="text-[6px] font-mono text-[#C4791F] dark:text-brand-accent font-bold uppercase tracking-tighter">PDF</span>
-                        <div className="w-1.5 h-1.5 bg-[#C4791F]/20 dark:bg-brand-accent/20 rounded-full"></div>
+                    {/* Source Type Thumbnail */}
+                    {doc.sourceType === 'WEBSITE' ? (
+                      <div className="h-16 w-12 border border-stone-200 dark:border-gray-850 bg-[#FAF8F3] dark:bg-[#0A0A0B] rounded flex flex-col items-center justify-center gap-1 shrink-0 select-none relative group-hover:border-[#C4791F]/20 dark:group-hover:border-brand-accent/20 transition-colors">
+                        <Globe className="h-5 w-5 text-[#C4791F] dark:text-brand-accent" />
+                        <span className="text-[6px] font-mono text-[#C4791F] dark:text-brand-accent font-bold uppercase tracking-tighter">WEB</span>
                       </div>
-                      <div className="flex flex-col gap-1 my-1">
-                        <div className="w-full h-[1px] bg-stone-200 dark:bg-gray-800"></div>
-                        <div className="w-4/5 h-[1px] bg-stone-200 dark:bg-gray-800"></div>
-                        <div className="w-5/6 h-[1px] bg-stone-200 dark:bg-gray-800"></div>
-                        <div className="w-3/4 h-[1px] bg-stone-200 dark:bg-gray-800"></div>
+                    ) : (
+                      <div className="h-16 w-12 border border-stone-200 dark:border-gray-850 bg-[#FAF8F3] dark:bg-[#0A0A0B] rounded flex flex-col justify-between p-1.5 shrink-0 select-none relative group-hover:border-[#C4791F]/20 dark:group-hover:border-brand-accent/20 transition-colors">
+                        <div className="flex justify-between items-start">
+                          <span className="text-[6px] font-mono text-[#C4791F] dark:text-brand-accent font-bold uppercase tracking-tighter">PDF</span>
+                          <div className="w-1.5 h-1.5 bg-[#C4791F]/20 dark:bg-brand-accent/20 rounded-full"></div>
+                        </div>
+                        <div className="flex flex-col gap-1 my-1">
+                          <div className="w-full h-[1px] bg-stone-200 dark:bg-gray-800"></div>
+                          <div className="w-4/5 h-[1px] bg-stone-200 dark:bg-gray-800"></div>
+                          <div className="w-5/6 h-[1px] bg-stone-200 dark:bg-gray-800"></div>
+                          <div className="w-3/4 h-[1px] bg-stone-200 dark:bg-gray-800"></div>
+                        </div>
+                        <div className="w-full h-1 bg-[#C4791F]/10 dark:bg-brand-accent/10 rounded-[1px]"></div>
                       </div>
-                      <div className="w-full h-1 bg-[#C4791F]/10 dark:bg-brand-accent/10 rounded-[1px]"></div>
-                    </div>
+                    )}
 
                     {/* Document Metadata & Actions */}
                     <div className="flex-1 flex flex-col justify-between min-w-0">
@@ -229,6 +236,11 @@ export default function Dashboard({ onSelectDocument }: DashboardProps) {
                           <h3 className="font-medium text-[#1A1815] dark:text-brand-text truncate text-sm" title={doc.originalName}>
                             {doc.originalName}
                           </h3>
+                          {doc.sourceType === 'WEBSITE' && doc.sourceUrl && (
+                            <p className="text-[10px] font-mono text-stone-400 dark:text-gray-500 mt-0.5 truncate" title={doc.sourceUrl}>
+                              {doc.sourceUrl}
+                            </p>
+                          )}
                           <p className="text-[10px] font-mono text-stone-400 dark:text-gray-500 mt-1">
                             {new Date(doc.createdAt).toLocaleDateString(undefined, {
                               year: 'numeric',

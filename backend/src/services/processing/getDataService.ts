@@ -9,16 +9,20 @@ export const getParsedData = async (fileId: string): Promise<String> => {
     try {
         const document = await prisma.document.findUnique({
             where: { id: fileId },
-            select: { s3Key: true },
+            select: { s3Key: true, sourceType: true },
         });
         if (!document) {
             throw new Error("Document not found");
         }
         const data = await getFile(document.s3Key);
-        const parsedData = await extractPDFText(data);
-        console.log("Parsed data: ", parsedData);
 
-        return parsedData;
+        if (document.sourceType === "PDF") {
+            return await extractPDFText(data);
+        } else {
+            return data.toString("utf-8");
+        }
+
+
     } catch (error) {
         console.error("Error getting file:", error);
         throw error;
