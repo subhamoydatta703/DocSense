@@ -82,7 +82,11 @@ export const webUrlContent = async (req: AuthenticatedRequest, res: Response) =>
             });
         }
         console.error("webUrlContent controller error ", error);
-        throw error;
+        const message = error instanceof Error ? error.message : "An unexpected error occurred";
+        return res.status(500).json({
+            success: false,
+            message: `Failed to fetch web page content`,
+        });
     }
 }
 
