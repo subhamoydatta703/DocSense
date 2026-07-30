@@ -4,7 +4,7 @@ import { PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from "@aws-sd
 
 
 // uploadfile to s3
-export const uploadFile = async (fileBuffer: Buffer, key: string): Promise<string> => {
+export const uploadFile = async (fileBuffer: Buffer , key: string): Promise<string> => {
     try {
         const command = new PutObjectCommand({
             Bucket: process.env.AWS_S3_BUCKET_NAME!,

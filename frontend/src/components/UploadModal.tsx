@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { X, Upload, FileText, Loader2, AlertTriangle } from 'lucide-react';
+import { X, Upload, FileText, Loader2, AlertTriangle, Globe, Link } from 'lucide-react';
 import { api } from '../api/apiClient';
 import type { Document } from '../App';
 
@@ -8,13 +8,35 @@ interface UploadModalProps {
   onSuccess: (doc: Document) => void;
 }
 
+type UploadTab = 'pdf' | 'url';
+
 function UploadModal({ onClose, onSuccess }: UploadModalProps) {
+  const [activeTab, setActiveTab] = useState<UploadTab>('pdf');
+
+  // PDF state
   const [dragActive, setDragActive] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // URL state
+  const [urlValue, setUrlValue] = useState('');
+
+  const resetState = () => {
+    setError(null);
+    setFile(null);
+    setUrlValue('');
+    setIsUploading(false);
+  };
+
+  const handleTabSwitch = (tab: UploadTab) => {
+    if (isUploading) return;
+    resetState();
+    setActiveTab(tab);
+  };
+
+  // ─── PDF handlers ───
   const handleDrag = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -79,6 +101,8 @@ function UploadModal({ onClose, onSuccess }: UploadModalProps) {
           s3Key: fileData.s3Key || '',
           status: fileData.status || 'PENDING',
           createdAt: fileData.createdAt || new Date().toISOString(),
+          sourceType: fileData.sourceType || 'PDF',
+          sourceUrl: fileData.sourceUrl,
         });
         onClose();
       } else {
@@ -96,6 +120,7 @@ function UploadModal({ onClose, onSuccess }: UploadModalProps) {
           s3Key: `mock/${Date.now()}-${file.name}`,
           status: 'PENDING',
           createdAt: new Date().toISOString(),
+          sourceType: 'PDF',
         };
         setTimeout(() => {
           onSuccess(mockDoc);
@@ -108,13 +133,63 @@ function UploadModal({ onClose, onSuccess }: UploadModalProps) {
     }
   };
 
+  // ─── URL handlers ───
+  const isValidUrl = (str: string): boolean => {
+    try {
+      const url = new URL(str);
+      return url.protocol === 'http:' || url.protocol === 'https:';
+    } catch {
+      return false;
+    }
+  };
+
+  const handleUrlSubmit = async () => {
+    const trimmed = urlValue.trim();
+    if (!trimmed) {
+      setError("Please enter a URL.");
+      return;
+    }
+    if (!isValidUrl(trimmed)) {
+      setError("Please enter a valid URL starting with http:// or https://");
+      return;
+    }
+
+    setIsUploading(true);
+    setError(null);
+
+    try {
+      const response = await api.post('/weburl', { url: trimmed });
+
+      if (response.data && response.data.success) {
+        const fileData = response.data.fileData.Document;
+        onSuccess({
+          id: fileData.id,
+          originalName: fileData.originalName,
+          s3Key: fileData.s3Key || '',
+          status: fileData.status || 'PENDING',
+          createdAt: fileData.createdAt || new Date().toISOString(),
+          sourceType: fileData.sourceType || 'WEBSITE',
+          sourceUrl: fileData.sourceUrl,
+        });
+        onClose();
+      } else {
+        setError(response.data.message || "Failed to process URL.");
+        setIsUploading(false);
+      }
+    } catch (err: any) {
+      const errorMsg = err.response?.data?.message || err.message;
+      setError(errorMsg || "Failed to fetch content from URL.");
+      setIsUploading(false);
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
       {/* Modal Card */}
       <div className="w-full max-w-lg bg-white dark:bg-brand-card border border-stone-200 dark:border-gray-800 rounded-xl shadow-2xl overflow-hidden flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-stone-200 dark:border-gray-800 px-6 py-4">
-          <h2 className="text-lg font-semibold text--[#1A1815] dark:text-white">Upload Document</h2>
+          <h2 className="text-lg font-semibold text--[#1A1815] dark:text-white">Add Source</h2>
           <button onClick={onClose} className="text-stone-500 hover:text-[#1A1815] dark:text-brand-muted dark:hover:text-white transition-colors">
             <X className="h-5 w-5" />
           </button>
@@ -122,46 +197,97 @@ function UploadModal({ onClose, onSuccess }: UploadModalProps) {
 
         {/* Body */}
         <div className="p-6 flex flex-col gap-4">
-          {/* Drag & Drop Zone */}
-          <div
-            onDragEnter={handleDrag}
-            onDragOver={handleDrag}
-            onDragLeave={handleDrag}
-            onDrop={handleDrop}
-            onClick={() => inputRef.current?.click()}
-            className={`border-2 border-dashed rounded-xl p-8 text-center flex flex-col items-center justify-center gap-3 cursor-pointer transition-all duration-200 ${
-              dragActive 
-                ? 'border-[#C4791F] dark:border-brand-accent bg-[#C4791F]/5 dark:bg-brand-accent/5' 
-                : 'border-stone-200 dark:border-brand-border hover:border-[#C4791F]/45 dark:hover:border-brand-accent/40 bg-stone-50/50 dark:bg-brand-bg/20'
-            }`}
-          >
-            <input
-              ref={inputRef}
-              type="file"
-              accept=".pdf"
-              onChange={handleChange}
-              className="hidden"
-              disabled={isUploading}
-            />
-
-            <Upload className="h-10 w-10 text-stone-400 dark:text-brand-muted" />
-            
-            {file ? (
-              <div className="flex items-center gap-2 text-[#1A1815] dark:text-white font-medium text-sm">
-                <FileText className="h-4.5 w-4.5 text-[#C4791F] dark:text-brand-accent" />
-                <span className="truncate max-w-xs">{file.name}</span>
-                <span className="text-xs text-stone-500 dark:text-brand-muted font-normal">
-                  ({(file.size / 1024 / 1024).toFixed(2)} MB)
-                </span>
-              </div>
-            ) : (
-              <div>
-                <p className="text-sm font-medium text-[#1A1815] dark:text-white">Drag & drop your PDF file here, or click to browse</p>
-                <p className="text-xs text-stone-500 dark:text-brand-muted mt-2">Only PDF documents up to 5MB and 100 pages are supported.</p>
-              </div>
-            )}
-
+          {/* Tab Switcher */}
+          <div className="flex gap-1 p-1 bg-stone-100 dark:bg-[#1A1918] rounded-lg">
+            <button
+              onClick={() => handleTabSwitch('pdf')}
+              className={`flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-md text-xs font-mono uppercase tracking-wider font-semibold transition-all duration-200 ${
+                activeTab === 'pdf'
+                  ? 'bg-white dark:bg-brand-card text-[#C4791F] dark:text-brand-accent shadow-sm'
+                  : 'text-stone-500 dark:text-brand-muted hover:text-[#1A1815] dark:hover:text-brand-text'
+              }`}
+            >
+              <Upload className="h-3.5 w-3.5" />
+              Upload PDF
+            </button>
+            <button
+              onClick={() => handleTabSwitch('url')}
+              className={`flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-md text-xs font-mono uppercase tracking-wider font-semibold transition-all duration-200 ${
+                activeTab === 'url'
+                  ? 'bg-white dark:bg-brand-card text-[#C4791F] dark:text-brand-accent shadow-sm'
+                  : 'text-stone-500 dark:text-brand-muted hover:text-[#1A1815] dark:hover:text-brand-text'
+              }`}
+            >
+              <Globe className="h-3.5 w-3.5" />
+              Web URL
+            </button>
           </div>
+
+          {/* ─── PDF Tab Content ─── */}
+          {activeTab === 'pdf' && (
+            <>
+              {/* Drag & Drop Zone */}
+              <div
+                onDragEnter={handleDrag}
+                onDragOver={handleDrag}
+                onDragLeave={handleDrag}
+                onDrop={handleDrop}
+                onClick={() => inputRef.current?.click()}
+                className={`border-2 border-dashed rounded-xl p-8 text-center flex flex-col items-center justify-center gap-3 cursor-pointer transition-all duration-200 ${
+                  dragActive 
+                    ? 'border-[#C4791F] dark:border-brand-accent bg-[#C4791F]/5 dark:bg-brand-accent/5' 
+                    : 'border-stone-200 dark:border-brand-border hover:border-[#C4791F]/45 dark:hover:border-brand-accent/40 bg-stone-50/50 dark:bg-brand-bg/20'
+                }`}
+              >
+                <input
+                  ref={inputRef}
+                  type="file"
+                  accept=".pdf"
+                  onChange={handleChange}
+                  className="hidden"
+                  disabled={isUploading}
+                />
+
+                <Upload className="h-10 w-10 text-stone-400 dark:text-brand-muted" />
+                
+                {file ? (
+                  <div className="flex items-center gap-2 text-[#1A1815] dark:text-white font-medium text-sm">
+                    <FileText className="h-4.5 w-4.5 text-[#C4791F] dark:text-brand-accent" />
+                    <span className="truncate max-w-xs">{file.name}</span>
+                    <span className="text-xs text-stone-500 dark:text-brand-muted font-normal">
+                      ({(file.size / 1024 / 1024).toFixed(2)} MB)
+                    </span>
+                  </div>
+                ) : (
+                  <div>
+                    <p className="text-sm font-medium text-[#1A1815] dark:text-white">Drag & drop your PDF file here, or click to browse</p>
+                    <p className="text-xs text-stone-500 dark:text-brand-muted mt-2">Only PDF documents up to 5MB and 100 pages are supported.</p>
+                  </div>
+                )}
+
+              </div>
+            </>
+          )}
+
+          {/* ─── URL Tab Content ─── */}
+          {activeTab === 'url' && (
+            <div className="flex flex-col gap-3">
+              <div className="relative">
+                <Link className="absolute left-3 top-3 h-4 w-4 text-stone-400 dark:text-brand-muted" />
+                <input
+                  type="url"
+                  value={urlValue}
+                  onChange={(e) => { setUrlValue(e.target.value); setError(null); }}
+                  placeholder="https://example.com/article"
+                  disabled={isUploading}
+                  className="w-full bg-white dark:bg-[#1A1918] border border-stone-200 dark:border-gray-800 rounded-lg pl-10 pr-4 py-2.5 text-sm text-[#1A1815] dark:text-brand-text placeholder:text-stone-400 dark:placeholder:text-brand-muted focus:outline-none focus:border-[#C4791F] dark:focus:border-brand-accent focus:ring-1 focus:ring-[#C4791F]/20 dark:focus:ring-brand-accent/20 transition-all duration-150 disabled:opacity-50"
+                />
+              </div>
+              <p className="text-xs text-stone-500 dark:text-brand-muted">
+                Enter a public web page URL. The page content will be scraped and indexed for Q&A.
+              </p>
+            </div>
+          )}
 
           {/* Validation Error Alert */}
           {error && (
@@ -181,17 +307,17 @@ function UploadModal({ onClose, onSuccess }: UploadModalProps) {
               Cancel
             </button>
             <button
-              onClick={handleUploadSubmit}
-              disabled={!file || isUploading}
+              onClick={activeTab === 'pdf' ? handleUploadSubmit : handleUrlSubmit}
+              disabled={activeTab === 'pdf' ? (!file || isUploading) : (!urlValue.trim() || isUploading)}
               className="bg-[#C4791F] dark:bg-brand-accent hover:opacity-90 disabled:opacity-50 text-white dark:text-black px-5 py-2 rounded-lg text-sm font-semibold transition-colors flex items-center gap-2"
             >
               {isUploading ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  Uploading...
+                  {activeTab === 'pdf' ? 'Uploading...' : 'Fetching...'}
                 </>
               ) : (
-                "Upload File"
+                activeTab === 'pdf' ? "Upload File" : "Fetch & Index"
               )}
             </button>
           </div>
@@ -202,3 +328,4 @@ function UploadModal({ onClose, onSuccess }: UploadModalProps) {
 }
 
 export default UploadModal;
+

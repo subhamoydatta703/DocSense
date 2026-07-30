@@ -4,6 +4,7 @@ import { prisma } from "./config/db/db";
 import { clerkMiddleware } from "@clerk/express";
 import uploadRoutes from "./routes/document/multerRoutes";
 import queryRoutes from "./routes/query/queryRoutes";
+import weburlRoutes from "./routes/web-url/weburlRoutes";
 
 const app = express();
 
@@ -40,6 +41,7 @@ app.use(clerkMiddleware());
 // API Routes
 app.use("/api", uploadRoutes);
 app.use("/api", queryRoutes);
+app.use("/api", weburlRoutes)
 
 // Health Check Route
 app.get("/health", async (req, res) => {
