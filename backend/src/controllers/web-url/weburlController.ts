@@ -6,7 +6,9 @@ import { uploadFile } from '../../services/storage/s3storageService';
 
 import { DocumentQueue } from '../../queue/documentQueue';
 import { createFileDBWebUrl } from '../../services/web-url/uploadWebUrlService';
-import { CreateWebUrlSchema } from '../../utils/validation';
+import { CreateWebUrlSchema, blockedHostnames, blockedRanges } from '../../utils/urlSecurity';
+// import { dns } from "bun"
+import ipaddr from 'ipaddr.js';
 import z from 'zod';
 
 
@@ -14,16 +16,42 @@ export const webUrlContent = async (req: AuthenticatedRequest, res: Response) =>
     try {
 
 
-        const url = req.body.url;
-        if (!url) {
+        // const url = req.body.url;
+        // if (!url) {
+        //     return res.status(400).json({
+        //         success: false,
+        //         message: "URL is required",
+        //     });
+        // }
+
+        // blocked hostname check
+
+        // security
+        const validated = CreateWebUrlSchema.parse({ url: req.body.url });
+
+        const parsedUrl = new URL(validated.url);
+        const hostname = parsedUrl.hostname.toLowerCase();
+        if (blockedHostnames.has(hostname)) {
             return res.status(400).json({
                 success: false,
-                message: "URL is required",
+                message: "The provided URL is not allowed.",
             });
         }
 
+        const ipAddresses = await Bun.dns.lookup(hostname);
+        for (const add of ipAddresses) {
+            const ip = ipaddr.parse(add.address);
+            const range = ip.range();
+            
+            if(blockedRanges.has(range)){
+                return res.status(400).json({
+                    success: false,
+                    message: "The provided URL is not allowed.",
+                });
+            }
 
-        const validated = CreateWebUrlSchema.parse({ url: req.body.url });
+        }
+
         const { content, originalName } = await webUrlContentService(validated.url);
 
 
@@ -82,11 +110,10 @@ export const webUrlContent = async (req: AuthenticatedRequest, res: Response) =>
             });
         }
         console.error("webUrlContent controller error ", error);
-        const message = error instanceof Error ? error.message : "An unexpected error occurred";
-        return res.status(500).json({
-            success: false,
-            message: `Failed to fetch web page content`,
-        });
+       return res.status(500).json({
+        success: false,
+        message: "Error processing request",
+       })
     }
 }
 
