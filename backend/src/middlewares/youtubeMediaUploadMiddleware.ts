@@ -23,7 +23,7 @@ const allowedExtensions = new Set([
 
 const youtubeMediaUpload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 50 * 1024 * 1024 },
+  limits: { fileSize: 25 * 1024 * 1024, files: 1 },
   fileFilter: (req, file, cb) => {
     const extension = path.extname(file.originalname).toLowerCase();
     if (allowedMediaTypes.has(file.mimetype) && allowedExtensions.has(extension)) {

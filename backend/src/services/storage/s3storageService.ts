@@ -10,6 +10,7 @@ export const uploadFile = async (fileBuffer: Buffer , key: string): Promise<stri
             Bucket: process.env.AWS_S3_BUCKET_NAME!,
             Body: fileBuffer,
             Key: key,
+            ServerSideEncryption: "AES256",
         });
         await s3Client.send(command);
         return key;

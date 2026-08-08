@@ -13,9 +13,7 @@ import {
     YoutubeTranscriptRateLimitedError,
 } from "../../services/youtube/transcriptService";
 import { YoutubeTranscriptProviderError } from "../../services/youtube/supadataTranscriptService";
-import { CreateWebUrlSchema, blockedHostnames, blockedRanges } from '../../utils/urlSecurity';
-// import { dns } from "bun"
-import ipaddr from 'ipaddr.js';
+import { CreateWebUrlSchema, assertPublicHttpsUrl } from '../../utils/urlSecurity';
 import z from 'zod';
 
 
@@ -51,26 +49,7 @@ export const youtubeContent = async (req: AuthenticatedRequest, res: Response) =
                 message: "Please provide a valid YouTube video URL.",
             });
         }
-        if (blockedHostnames.has(hostname)) {
-            return res.status(400).json({
-                success: false,
-                message: "The provided URL is not allowed.",
-            });
-        }
-
-        const ipAddresses = await Bun.dns.lookup(hostname);
-        for (const add of ipAddresses) {
-            const ip = ipaddr.parse(add.address);
-            const range = ip.range();
-            
-            if(blockedRanges.has(range)){
-                return res.status(400).json({
-                    success: false,
-                    message: "The provided URL is not allowed.",
-                });
-            }
-
-        }
+        await assertPublicHttpsUrl(validated.url);
 
         const { transcriptContent, title, channel, videoId, sourceUrl } = await transcriptYoutubeVideo(validated.url);
 
@@ -95,7 +74,7 @@ export const youtubeContent = async (req: AuthenticatedRequest, res: Response) =
         // const fileData = await createFileDBWebUrl(uploadedKey, safeFileName, transcriptContent, validated.url, userId);
         const fileData = await createFileDBYoutubeUrl(uploadedKey, safeFileName, safeOriginalName, validated.url, userId);
 
-        console.log("fileData from upload document controller", JSON.stringify(fileData, null, 2));
+        console.info("YouTube source record created", { documentId: fileData.Document.id });
 
         // add job to queue
 

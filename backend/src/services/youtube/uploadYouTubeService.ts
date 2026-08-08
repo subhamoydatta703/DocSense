@@ -18,7 +18,7 @@ export const createFileDBYoutubeUrl = async (
       userId: userId,
     },
   });
-  console.log("Checking duplicate in DB: ", existingYoutubeUrl);
+  console.info("Checked for an existing YouTube source", { duplicateFound: Boolean(existingYoutubeUrl) });
 
   if (existingYoutubeUrl) {
     // Clean up old file from S3

@@ -16,7 +16,7 @@ export const createFileDB = async (
       userId: userId,
     },
   });
-  console.log("Checking duplicate in DB: ", existingDocument);
+  console.info("Checked for an existing document", { duplicateFound: Boolean(existingDocument) });
 
   if (existingDocument) {
     // Clean up old file from S3

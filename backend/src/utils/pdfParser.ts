@@ -17,7 +17,7 @@ export async function extractPDFText(dataBuffer: Buffer): Promise<string> {
 
     const result = await parser.getText();
 
-    console.log('Parsed PDF Text:\n', result.text);
+    console.info("PDF text extracted", { characters: result.text.length });
 
     return result.text;
 

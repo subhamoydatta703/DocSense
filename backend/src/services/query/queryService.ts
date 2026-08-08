@@ -21,7 +21,7 @@ export const userQueryService = async (userQuery: string, userId: string, docume
         }
         // 0. call query optimization service and use it and thr retured value goes inside the next function calls
         const optimizedQuery = await optimizeQuery(userQuery);
-        console.log(optimizeQuery);
+        console.info("Query optimization completed");
 
 
 
@@ -29,11 +29,7 @@ export const userQueryService = async (userQuery: string, userId: string, docume
         const embeddedQuery = await createEmbeddings(optimizedQuery);
         // 2. rawquery call and get top 5 similar chunks from db
         const relatedChunks = await searchSimilarVectors(embeddedQuery, userId, documentId) as any[];
-        // console.log("relatedChunks from user query service", relatedChunks);
-        for (let chunk of relatedChunks) {
-            console.log(chunk);
-
-        }
+        console.info("Vector search completed", { resultCount: relatedChunks.length });
 
         // 3. filter by distance 
         const relevantChunks = relatedChunks.filter(r => r.distance <= 0.4);

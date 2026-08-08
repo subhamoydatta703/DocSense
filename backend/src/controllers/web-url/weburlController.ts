@@ -6,9 +6,7 @@ import { uploadFile } from '../../services/storage/s3storageService';
 
 import { DocumentQueue } from '../../queue/documentQueue';
 import { createFileDBWebUrl } from '../../services/web-url/uploadWebUrlService';
-import { CreateWebUrlSchema, blockedHostnames, blockedRanges } from '../../utils/urlSecurity';
-// import { dns } from "bun"
-import ipaddr from 'ipaddr.js';
+import { CreateWebUrlSchema, assertPublicHttpsUrl } from '../../utils/urlSecurity';
 import z from 'zod';
 
 
@@ -29,28 +27,7 @@ export const webUrlContent = async (req: AuthenticatedRequest, res: Response) =>
         // security
         const validated = CreateWebUrlSchema.parse({ url: req.body.url });
 
-        const parsedUrl = new URL(validated.url);
-        const hostname = parsedUrl.hostname.toLowerCase();
-        if (blockedHostnames.has(hostname)) {
-            return res.status(400).json({
-                success: false,
-                message: "The provided URL is not allowed.",
-            });
-        }
-
-        const ipAddresses = await Bun.dns.lookup(hostname);
-        for (const add of ipAddresses) {
-            const ip = ipaddr.parse(add.address);
-            const range = ip.range();
-            
-            if(blockedRanges.has(range)){
-                return res.status(400).json({
-                    success: false,
-                    message: "The provided URL is not allowed.",
-                });
-            }
-
-        }
+        await assertPublicHttpsUrl(validated.url);
 
         const { content, originalName } = await webUrlContentService(validated.url);
 
@@ -71,7 +48,7 @@ export const webUrlContent = async (req: AuthenticatedRequest, res: Response) =>
         // Save to DB
         const fileData = await createFileDBWebUrl(uploadedKey, originalName, validated.url, userId);
 
-        console.log("fileData from upload document controller", JSON.stringify(fileData, null, 2));
+        console.info("Web source record created", { documentId: fileData.Document.id });
 
         // add job to queue
 

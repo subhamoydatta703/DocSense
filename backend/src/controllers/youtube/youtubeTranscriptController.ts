@@ -18,6 +18,12 @@ export const uploadYoutubeTranscript = async (
     }
 
     const transcript = req.file.buffer.toString("utf8").trim();
+    if (req.file.buffer.includes(0)) {
+      return res.status(400).json({
+        success: false,
+        message: "The transcript must be a plain-text UTF-8 file.",
+      });
+    }
     if (!transcript) {
       return res.status(400).json({
         success: false,

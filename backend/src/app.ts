@@ -1,5 +1,6 @@
 import express from "express";
 import cors from "cors";
+import helmet from "helmet";
 import { prisma } from "./config/db/db";
 import { clerkMiddleware } from "@clerk/express";
 import uploadRoutes from "./routes/document/multerRoutes";
@@ -12,7 +13,7 @@ const app = express();
 // Middlewares
 // CORS configuration
 const allowedOrigins = process.env.FRONTEND_URL
-  ? process.env.FRONTEND_URL.split(",")
+  ? process.env.FRONTEND_URL.split(",").map((origin) => origin.trim()).filter(Boolean)
   : ["http://localhost:5173", "http://localhost:3000"];
 
 app.use(
@@ -29,6 +30,7 @@ app.use(
     credentials: true,
   })
 );
+app.use(helmet());
 app.use(
   express.json({
     verify: (req: any, res, buf) => {
@@ -52,7 +54,8 @@ app.get("/health", async (req, res) => {
     await prisma.$queryRaw`SELECT 1`;
     dbStatus = "connected";
   } catch (error: any) {
-    dbStatus = `disconnected: ${error.message || error}`;
+    console.error("Health check database query failed:", error instanceof Error ? error.name : "UnknownError");
+    dbStatus = "disconnected";
   }
 
   const isHealthy = dbStatus === "connected";
