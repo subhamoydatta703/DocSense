@@ -52,7 +52,7 @@ export async function authMiddleware(req: AuthenticatedRequest, res: Response, n
         user = await prisma.user.create({
           data: validatedUser,
         });
-        console.log(`Synced new user from Clerk: ${email} (ID: ${userId})`);
+        console.info("Synced new user from Clerk");
       } catch (clerkErr) {
         console.error("Failed to sync user from Clerk:", clerkErr);
         // Fallback: create user with placeholder email to avoid blocking flow

@@ -26,7 +26,7 @@ export const uploadDocument = async (req: AuthenticatedRequest, res: Response) =
     // Save to DB
     const fileData = await createFileDB(uploadedKey, originalName, userId);
 
-    console.log("fileData from upload document controller", JSON.stringify(fileData, null, 2));
+    console.info("Document record created", { documentId: fileData.Document.id });
 
     // add job to queue
 

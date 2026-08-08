@@ -12,11 +12,11 @@ export const createEmbeddings = async (chunk: string): Promise<number[]> => {
         config: { outputDimensionality: 768 },
     });
 
-    console.log(response.embeddings);
     const values = response.embeddings?.[0]?.values;
 if (!values || values.length === 0) {
   throw new Error("Embedding API returned empty values");
 }
+console.info("Embedding created", { dimensions: values.length });
 return values;
 
 

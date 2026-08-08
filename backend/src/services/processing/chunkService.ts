@@ -9,9 +9,12 @@ export const createChunks = async (documentID: string): Promise<string[]> => {
             chunkOverlap: 200,
         });
         const textData = await getParsedData(documentID)
-        console.log("Parsed Data: ", textData);
         const chunks = await splitter.splitText(textData as string)
-        console.log("Chunks: ", chunks);
+        console.info("Document chunking completed", {
+            documentId: documentID,
+            characterCount: textData.length,
+            chunkCount: chunks.length,
+        });
         return chunks;
     } catch (error) {
         console.error("Error in chunk service: ", error);

@@ -17,7 +17,7 @@ export const createFileDBWebUrl = async (
       userId: userId,
     },
   });
-  console.log("Checking duplicate in DB: ", existingWebUrl);
+  console.info("Checked for an existing web source", { duplicateFound: Boolean(existingWebUrl) });
 
   if (existingWebUrl) {
     // Clean up old file from S3

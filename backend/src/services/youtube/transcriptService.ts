@@ -237,10 +237,10 @@ export const transcriptYoutubeVideo = async (videoUrl: string) => {
                 }
             }
         }
-        console.log("Video Title:", title);
-        console.log("Channel:", channel);
-        console.log("Video ID:", videoId);
-        console.log("Transcript Content:\n", transcriptContent);
+        console.info("YouTube transcript retrieved", {
+            videoId,
+            characterCount: transcriptContent.length,
+        });
 
         const result = { transcriptContent, title, channel, videoId, sourceUrl };
         try {
