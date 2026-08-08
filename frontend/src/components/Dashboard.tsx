@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Search, Plus, Loader2, FileUp, Trash2, Globe } from 'lucide-react';
+import { Search, Plus, Loader2, FileUp, Trash2, Globe, Video } from 'lucide-react';
 import { api } from '../api/apiClient';
 import type { Document } from '../App';
 import UploadModal from './UploadModal';
@@ -208,7 +208,12 @@ export default function Dashboard({ onSelectDocument }: DashboardProps) {
                     }`}
                   >
                     {/* Source Type Thumbnail */}
-                    {doc.sourceType === 'WEBSITE' ? (
+                    {doc.sourceType === 'YOUTUBE' ? (
+                      <div className="h-16 w-12 border border-stone-200 dark:border-gray-850 bg-[#FAF8F3] dark:bg-[#0A0A0B] rounded flex flex-col items-center justify-center gap-1 shrink-0 select-none relative group-hover:border-red-500/20 transition-colors">
+                        <Video className="h-5 w-5 text-red-500 dark:text-red-400" />
+                        <span className="text-[6px] font-mono text-red-500 dark:text-red-400 font-bold uppercase tracking-tighter">YOUTUBE</span>
+                      </div>
+                    ) : doc.sourceType === 'WEBSITE' ? (
                       <div className="h-16 w-12 border border-stone-200 dark:border-gray-850 bg-[#FAF8F3] dark:bg-[#0A0A0B] rounded flex flex-col items-center justify-center gap-1 shrink-0 select-none relative group-hover:border-[#C4791F]/20 dark:group-hover:border-brand-accent/20 transition-colors">
                         <Globe className="h-5 w-5 text-[#C4791F] dark:text-brand-accent" />
                         <span className="text-[6px] font-mono text-[#C4791F] dark:text-brand-accent font-bold uppercase tracking-tighter">WEB</span>
@@ -236,7 +241,7 @@ export default function Dashboard({ onSelectDocument }: DashboardProps) {
                           <h3 className="font-medium text-[#1A1815] dark:text-brand-text truncate text-sm" title={doc.originalName}>
                             {doc.originalName}
                           </h3>
-                          {doc.sourceType === 'WEBSITE' && doc.sourceUrl && (
+                          {(doc.sourceType === 'WEBSITE' || doc.sourceType === 'YOUTUBE') && doc.sourceUrl && (
                             <p className="text-[10px] font-mono text-stone-400 dark:text-gray-500 mt-0.5 truncate" title={doc.sourceUrl}>
                               {doc.sourceUrl}
                             </p>

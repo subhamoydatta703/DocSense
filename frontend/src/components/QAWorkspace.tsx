@@ -192,6 +192,25 @@ export default function QAWorkspace({ document, onBack }: QAWorkspaceProps) {
               <span className="text-[10px] font-mono text-stone-500 dark:text-brand-muted uppercase block">Filename</span>
               <span className="text-[#1A1815] dark:text-brand-text font-medium break-all mt-1 block">{document.originalName}</span>
             </div>
+            {document.sourceType && (
+              <div>
+                <span className="text-[10px] font-mono text-stone-500 dark:text-brand-muted uppercase block">Source Type</span>
+                <span className="text-[#1A1815] dark:text-brand-text font-medium mt-1 block">{document.sourceType}</span>
+              </div>
+            )}
+            {document.sourceUrl && (
+              <div>
+                <span className="text-[10px] font-mono text-stone-500 dark:text-brand-muted uppercase block">Source URL</span>
+                <a
+                  href={document.sourceUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[#C4791F] dark:text-brand-accent font-medium break-all mt-1 block hover:underline"
+                >
+                  {document.sourceUrl}
+                </a>
+              </div>
+            )}
             <div>
               <span className="text-[10px] font-mono text-stone-500 dark:text-brand-muted uppercase block">Upload Date</span>
               <span className="text-[#1A1815] dark:text-brand-text font-medium mt-1 block">

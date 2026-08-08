@@ -12,7 +12,7 @@ export interface Document {
   s3Key: string;
   status: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
   createdAt: string;
-  sourceType?: 'PDF' | 'WEBSITE';
+  sourceType?: 'PDF' | 'WEBSITE' | 'YOUTUBE';
   sourceUrl?: string;
 }
 
