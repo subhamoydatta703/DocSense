@@ -58,7 +58,8 @@ function extractVideoId(url: string): string {
     return match[1]!;
 }
 
-// Distinguishes "no transcript exists for this video" (fine, use fallback caption) from "network/parsing broke" (real failure, let it throw and be retried/surfaced upstream).
+// Identifies errors that mean the video cannot currently provide an accessible
+// caption track. These must never be converted into document content.
 function isNoTranscriptError(err: unknown): boolean {
     const errorName = err instanceof Error ? err.name : undefined;
     return (
@@ -71,9 +72,14 @@ function isNoTranscriptError(err: unknown): boolean {
     );
 }
 
-function buildDefaultCaption(sourceUrl: string): string {
-    const fetchedOn = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
-    return `No transcript available for ${sourceUrl} (checked on ${fetchedOn}).`;
+export class YoutubeTranscriptUnavailableError extends Error {
+    readonly videoId: string;
+
+    constructor(videoId: string) {
+        super(`No accessible transcript is available for YouTube video ${videoId}.`);
+        this.name = "YoutubeTranscriptUnavailableError";
+        this.videoId = videoId;
+    }
 }
 
 export const transcriptYoutubeVideo = async (videoUrl: string) => {
@@ -97,7 +103,8 @@ export const transcriptYoutubeVideo = async (videoUrl: string) => {
         const title = oembed.title || "Unknown Title";
         const channel = oembed.author_name || "Unknown Channel";
 
-        // 2. Transcript via youtube-transcript-plus, with browser-like headers and retry for transient failures. Falls back to a default caption if the video genuinely has no transcript.
+        // 2. Transcript via youtube-transcript-plus, with browser-like headers
+        // and bounded retry for transient failures.
         let transcriptContent: string;
         try {
             const segments = await fetchTranscript(videoId, {
@@ -111,8 +118,11 @@ export const transcriptYoutubeVideo = async (videoUrl: string) => {
             transcriptContent = segments.map((s) => s.text).join(" ");
         } catch (transcriptErr: any) {
             if (isNoTranscriptError(transcriptErr)) {
-                transcriptContent = buildDefaultCaption(sourceUrl);
-                console.log("Transcript Content:\n", transcriptContent);
+                console.warn(
+                    `[YouTube transcript] no accessible captions for ${videoId}:`,
+                    transcriptErr?.message || transcriptErr,
+                );
+                throw new YoutubeTranscriptUnavailableError(videoId);
             }else{
                 console.error(
                     `[YouTube transcript] failed for ${videoId}: ${transcriptErr?.name || "UnknownError"}`,
