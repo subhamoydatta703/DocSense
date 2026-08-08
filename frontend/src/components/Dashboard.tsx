@@ -69,7 +69,7 @@ export default function Dashboard({ onSelectDocument }: DashboardProps) {
       } catch (err) {
         // Fall back to simulation
       }
-    }, 4000);
+    }, 10000);
 
     return () => clearInterval(interval);
   }, [documents]);
