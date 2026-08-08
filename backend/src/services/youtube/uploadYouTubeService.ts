@@ -5,6 +5,7 @@ import { deleteVectorsByDocumentId } from "../vectors/vectorService";
 
 export const createFileDBYoutubeUrl = async (
   s3Key: string,
+  fileName: string,
   originalName: string,
   url: string,
   userId: string
@@ -45,7 +46,7 @@ export const createFileDBYoutubeUrl = async (
     const updatedDocument = await prisma.document.update({
       where: { id: existingYoutubeUrl.id },
       data: {
-        fileName: originalName,
+        fileName: fileName,
         s3Key: s3Key,
         status: "PENDING",
       },
@@ -56,7 +57,7 @@ export const createFileDBYoutubeUrl = async (
 
   const Document = await prisma.document.create({
     data: {
-      fileName: originalName,
+      fileName: fileName,
       s3Key: s3Key,
       originalName: originalName,
       sourceUrl: url,
