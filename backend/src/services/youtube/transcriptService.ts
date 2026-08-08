@@ -6,6 +6,7 @@ import {
 } from "youtube-transcript-plus";
 import type { FetchParams } from "youtube-transcript-plus";
 import { redisClient } from "../../config/redis/redisCaching";
+import { getSupadataTranscript } from "./supadataTranscriptService";
 
 // A real browser User-Agent avoids YouTube serving a consent/cookie-wall
 // page instead of the actual watch page, which is what makes the scraper
@@ -193,39 +194,47 @@ export const transcriptYoutubeVideo = async (videoUrl: string) => {
         const title = oembed.title || "Unknown Title";
         const channel = oembed.author_name || "Unknown Channel";
 
-        // 2. Transcript via youtube-transcript-plus, with browser-like headers
-        // and bounded retry for transient failures.
+        // 2. Use the configured transcript provider first. It handles the
+        // provider's own caption/ASR fallback without exposing its API key.
         let transcriptContent: string;
-        try {
-            const segments = await fetchTranscript(videoId, {
-                userAgent: BROWSER_HEADERS["User-Agent"],
-                retries: TRANSCRIPT_RETRIES,
-                retryDelay: 1_000,
-                videoFetch: (params) => fetchYouTube(params, "watch-page", videoId),
-                playerFetch: async (params) => {
-                    const response = await fetchYouTube(params, "player", videoId);
-                    await logPlayerResponse(response, videoId);
-                    return response;
-                },
-                transcriptFetch: (params) => fetchYouTube(params, "transcript", videoId),
-            });
-            transcriptContent = segments.map((s) => s.text).join(" ");
-        } catch (transcriptErr: any) {
-            if (transcriptErr instanceof YoutubeTranscriptRateLimitedError) {
-                throw transcriptErr;
-            }
-            if (isNoTranscriptError(transcriptErr)) {
-                console.warn(
-                    `[YouTube transcript] no accessible captions for ${videoId}:`,
-                    transcriptErr?.message || transcriptErr,
-                );
-                throw new YoutubeTranscriptUnavailableError(videoId);
-            }else{
-                console.error(
-                    `[YouTube transcript] failed for ${videoId}: ${transcriptErr?.name || "UnknownError"}`,
-                    transcriptErr?.message || transcriptErr,
-                );
-                throw new Error(`Could not fetch transcript for video: ${transcriptErr?.message || transcriptErr}`);
+        const providerTranscript = await getSupadataTranscript(sourceUrl);
+        if (providerTranscript) {
+            transcriptContent = providerTranscript;
+            console.info(`[YouTube transcript] provider transcript retrieved for ${videoId}`);
+        } else {
+            // No provider key is configured, so retain the existing public-
+            // caption attempt for local development and captioned videos.
+            try {
+                const segments = await fetchTranscript(videoId, {
+                    userAgent: BROWSER_HEADERS["User-Agent"],
+                    retries: TRANSCRIPT_RETRIES,
+                    retryDelay: 1_000,
+                    videoFetch: (params) => fetchYouTube(params, "watch-page", videoId),
+                    playerFetch: async (params) => {
+                        const response = await fetchYouTube(params, "player", videoId);
+                        await logPlayerResponse(response, videoId);
+                        return response;
+                    },
+                    transcriptFetch: (params) => fetchYouTube(params, "transcript", videoId),
+                });
+                transcriptContent = segments.map((s) => s.text).join(" ");
+            } catch (transcriptErr: any) {
+                if (transcriptErr instanceof YoutubeTranscriptRateLimitedError) {
+                    throw transcriptErr;
+                }
+                if (isNoTranscriptError(transcriptErr)) {
+                    console.warn(
+                        `[YouTube transcript] no accessible captions for ${videoId}:`,
+                        transcriptErr?.message || transcriptErr,
+                    );
+                    throw new YoutubeTranscriptUnavailableError(videoId);
+                } else {
+                    console.error(
+                        `[YouTube transcript] failed for ${videoId}: ${transcriptErr?.name || "UnknownError"}`,
+                        transcriptErr?.message || transcriptErr,
+                    );
+                    throw new Error(`Could not fetch transcript for video: ${transcriptErr?.message || transcriptErr}`);
+                }
             }
         }
         console.log("Video Title:", title);

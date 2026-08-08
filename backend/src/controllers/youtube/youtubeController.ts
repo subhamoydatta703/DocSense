@@ -12,6 +12,7 @@ import {
     YoutubeTranscriptUnavailableError,
     YoutubeTranscriptRateLimitedError,
 } from "../../services/youtube/transcriptService";
+import { YoutubeTranscriptProviderError } from "../../services/youtube/supadataTranscriptService";
 import { CreateWebUrlSchema, blockedHostnames, blockedRanges } from '../../utils/urlSecurity';
 // import { dns } from "bun"
 import ipaddr from 'ipaddr.js';
@@ -37,6 +38,19 @@ export const youtubeContent = async (req: AuthenticatedRequest, res: Response) =
 
         const parsedUrl = new URL(validated.url);
         const hostname = parsedUrl.hostname.toLowerCase();
+        const isYouTubeHost = new Set([
+            "youtube.com",
+            "www.youtube.com",
+            "m.youtube.com",
+            "youtu.be",
+            "www.youtu.be",
+        ]).has(hostname);
+        if (!isYouTubeHost) {
+            return res.status(400).json({
+                success: false,
+                message: "Please provide a valid YouTube video URL.",
+            });
+        }
         if (blockedHostnames.has(hostname)) {
             return res.status(400).json({
                 success: false,
@@ -131,6 +145,19 @@ export const youtubeContent = async (req: AuthenticatedRequest, res: Response) =
                 success: false,
                 message: "YouTube is temporarily rate-limiting transcript requests. Please try again later.",
                 retryAfterSeconds: error.retryAfterSeconds,
+            });
+        }
+        if (error instanceof YoutubeTranscriptProviderError) {
+            const status = error.status === 401 || error.status === 403
+                ? 502
+                : error.status === 402
+                    ? 503
+                    : error.status === 429
+                        ? 429
+                        : 422;
+            return res.status(status).json({
+                success: false,
+                message: error.message,
             });
         }
         console.error("youtubeController error ", error);
