@@ -76,23 +76,20 @@ export const transcriptYoutubeVideo = async (videoUrl: string) => {
         try {
             const segments = await withRetry(() =>
                 fetchTranscript(videoId, {
-                    lang: "en",
+                    // lang: "en",
                     videoFetch: async ({ url }) => fetch(url, { headers: BROWSER_HEADERS }),
                 })
             );
             transcriptContent = segments.map((s) => s.text).join(" ");
-        } catch (transcriptErr) {
-            if (isNoTranscriptError(transcriptErr)) {
-                console.warn(`No transcript for ${sourceUrl}, using default caption.`);
-                transcriptContent = buildDefaultCaption(sourceUrl);
-            } else {
-                throw transcriptErr;
-            }
+        } catch (transcriptErr: any) {
+            console.error(`Failed to fetch transcript for ${sourceUrl}:`, transcriptErr);
+            throw new Error(`Could not fetch transcript for video: ${transcriptErr.message || transcriptErr}`);
         }
 
         console.log("Video Title:", title);
         console.log("Channel:", channel);
         console.log("Video ID:", videoId);
+        console.log("Transcript Content:\n", transcriptContent);
 
         return { transcriptContent, title, channel, videoId, sourceUrl };
     } catch (error) {
