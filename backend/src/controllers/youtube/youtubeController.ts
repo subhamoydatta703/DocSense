@@ -7,7 +7,10 @@ import { uploadFile } from '../../services/storage/s3storageService';
 import { DocumentQueue } from '../../queue/documentQueue';
 // import { createFileDBWebUrl } from '../../services/web-url/uploadWebUrlService';
 import { createFileDBYoutubeUrl } from "../../services/youtube/uploadYouTubeService";
-import {transcriptYoutubeVideo} from "../../services/youtube/transcriptService";
+import {
+    transcriptYoutubeVideo,
+    YoutubeTranscriptUnavailableError,
+} from "../../services/youtube/transcriptService";
 import { CreateWebUrlSchema, blockedHostnames, blockedRanges } from '../../utils/urlSecurity';
 // import { dns } from "bun"
 import ipaddr from 'ipaddr.js';
@@ -113,6 +116,12 @@ export const youtubeContent = async (req: AuthenticatedRequest, res: Response) =
                 success: false,
                 message: "Validation error",
                 errors: error.issues,
+            });
+        }
+        if (error instanceof YoutubeTranscriptUnavailableError) {
+            return res.status(400).json({
+                success: false,
+                message: "This YouTube video does not have captions accessible to DocSense.",
             });
         }
         console.error("youtubeController error ", error);
