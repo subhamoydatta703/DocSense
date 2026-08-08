@@ -19,6 +19,21 @@ const BROWSER_HEADERS = {
 const YOUTUBE_REQUEST_TIMEOUT_MS = 15_000;
 const TRANSCRIPT_RETRIES = 2;
 
+type PlayerResponseForLogging = {
+    playabilityStatus?: {
+        status?: unknown;
+        reason?: unknown;
+    };
+    captions?: {
+        playerCaptionsTracklistRenderer?: {
+            captionTracks?: unknown;
+        };
+    };
+    playerCaptionsTracklistRenderer?: {
+        captionTracks?: unknown;
+    };
+};
+
 // Keep the request identity consistent across the watch page, InnerTube player,
 // and transcript requests. No browser session or authentication cookies are sent.
 async function fetchYouTube(params: FetchParams, stage: string): Promise<Response> {
@@ -48,6 +63,37 @@ async function fetchYouTube(params: FetchParams, stage: string): Promise<Respons
     } finally {
         clearTimeout(timeout);
         params.signal?.removeEventListener("abort", abortFromCaller);
+    }
+}
+
+async function logPlayerResponse(response: Response, videoId: string): Promise<void> {
+    try {
+        const player = await response.clone().json() as PlayerResponseForLogging;
+        const tracklist =
+            player.captions?.playerCaptionsTracklistRenderer ??
+            player.playerCaptionsTracklistRenderer;
+        const captionTracks = Array.isArray(tracklist?.captionTracks)
+            ? tracklist.captionTracks
+            : [];
+        const status = typeof player.playabilityStatus?.status === "string"
+            ? player.playabilityStatus.status
+            : "unknown";
+        const reason = typeof player.playabilityStatus?.reason === "string"
+            ? player.playabilityStatus.reason.slice(0, 200)
+            : undefined;
+
+        console.info("[YouTube transcript] player diagnostics", {
+            videoId,
+            playabilityStatus: status,
+            ...(reason ? { playabilityReason: reason } : {}),
+            hasCaptions: Boolean(player.captions || player.playerCaptionsTracklistRenderer),
+            captionTrackCount: captionTracks.length,
+        });
+    } catch (error) {
+        console.warn(
+            `[YouTube transcript] player diagnostics unavailable for ${videoId}:`,
+            error instanceof Error ? error.name : "UnknownError",
+        );
     }
 }
 
@@ -112,7 +158,11 @@ export const transcriptYoutubeVideo = async (videoUrl: string) => {
                 retries: TRANSCRIPT_RETRIES,
                 retryDelay: 1_000,
                 videoFetch: (params) => fetchYouTube(params, "watch-page"),
-                playerFetch: (params) => fetchYouTube(params, "player"),
+                playerFetch: async (params) => {
+                    const response = await fetchYouTube(params, "player");
+                    await logPlayerResponse(response, videoId);
+                    return response;
+                },
                 transcriptFetch: (params) => fetchYouTube(params, "transcript"),
             });
             transcriptContent = segments.map((s) => s.text).join(" ");
