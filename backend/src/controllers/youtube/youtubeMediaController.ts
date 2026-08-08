@@ -17,8 +17,8 @@ function hasSupportedMediaSignature(buffer: Buffer): boolean {
     signature[2] === 0xdf && signature[3] === 0xa3;
   const isMp4Family = signature.subarray(4, 8).toString("ascii") === "ftyp";
   const isMp3 = signature.subarray(0, 3).toString("ascii") === "ID3" ||
-    (signature[0] === 0xff && (signature[1] & 0xe0) === 0xe0);
-  const isAac = signature[0] === 0xff && (signature[1] & 0xf6) === 0xf0;
+    (signature[0] === 0xff && (signature[1]! & 0xe0) === 0xe0);
+  const isAac = signature[0] === 0xff && (signature[1]! & 0xf6) === 0xf0;
   return isWav || isFlac || isOgg || isWebm || isMp4Family || isMp3 || isAac;
 }
 
