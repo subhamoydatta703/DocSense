@@ -5,6 +5,7 @@ import { clerkMiddleware } from "@clerk/express";
 import uploadRoutes from "./routes/document/multerRoutes";
 import queryRoutes from "./routes/query/queryRoutes";
 import weburlRoutes from "./routes/web-url/weburlRoutes";
+import youtubeRoutes from "./routes/youtube/youtubeRoutes";
 
 const app = express();
 
@@ -41,7 +42,8 @@ app.use(clerkMiddleware());
 // API Routes
 app.use("/api", uploadRoutes);
 app.use("/api", queryRoutes);
-app.use("/api", weburlRoutes)
+app.use("/api", weburlRoutes);
+app.use("/api", youtubeRoutes);
 
 // Health Check Route
 app.get("/health", async (req, res) => {
