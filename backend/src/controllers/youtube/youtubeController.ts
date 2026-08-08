@@ -12,7 +12,6 @@ import {
     YoutubeTranscriptUnavailableError,
     YoutubeTranscriptRateLimitedError,
 } from "../../services/youtube/transcriptService";
-import { YoutubeCaptionPermissionError } from "../../services/youtube/authorizedCaptionService";
 import { CreateWebUrlSchema, blockedHostnames, blockedRanges } from '../../utils/urlSecurity';
 // import { dns } from "bun"
 import ipaddr from 'ipaddr.js';
@@ -59,7 +58,7 @@ export const youtubeContent = async (req: AuthenticatedRequest, res: Response) =
 
         }
 
-        const { transcriptContent, title, channel, videoId, sourceUrl } = await transcriptYoutubeVideo(validated.url, req.userId);
+        const { transcriptContent, title, channel, videoId, sourceUrl } = await transcriptYoutubeVideo(validated.url);
 
 
         const userId = req.userId!;
@@ -132,12 +131,6 @@ export const youtubeContent = async (req: AuthenticatedRequest, res: Response) =
                 success: false,
                 message: "YouTube is temporarily rate-limiting transcript requests. Please try again later.",
                 retryAfterSeconds: error.retryAfterSeconds,
-            });
-        }
-        if (error instanceof YoutubeCaptionPermissionError) {
-            return res.status(403).json({
-                success: false,
-                message: "Google allowed the caption lookup, but this connected YouTube account cannot download captions for this video. Connect the Google account that owns or manages the video, then try again.",
             });
         }
         console.error("youtubeController error ", error);

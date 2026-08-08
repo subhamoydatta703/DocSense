@@ -6,7 +6,6 @@ import {
 } from "youtube-transcript-plus";
 import type { FetchParams } from "youtube-transcript-plus";
 import { redisClient } from "../../config/redis/redisCaching";
-import { getAuthorizedYouTubeTranscript } from "./authorizedCaptionService";
 
 // A real browser User-Agent avoids YouTube serving a consent/cookie-wall
 // page instead of the actual watch page, which is what makes the scraper
@@ -158,7 +157,7 @@ export class YoutubeTranscriptUnavailableError extends Error {
     }
 }
 
-export const transcriptYoutubeVideo = async (videoUrl: string, userId?: string) => {
+export const transcriptYoutubeVideo = async (videoUrl: string) => {
     try {
         console.log("Fetching video transcript...");
         const videoId = extractVideoId(videoUrl);
@@ -193,25 +192,6 @@ export const transcriptYoutubeVideo = async (videoUrl: string, userId?: string) 
         const oembed = await oembedRes.json();
         const title = oembed.title || "Unknown Title";
         const channel = oembed.author_name || "Unknown Channel";
-
-        if (userId) {
-            const authorizedTranscript = await getAuthorizedYouTubeTranscript(videoId, userId);
-            if (authorizedTranscript) {
-                const result = {
-                    transcriptContent: authorizedTranscript,
-                    title,
-                    channel,
-                    videoId,
-                    sourceUrl,
-                };
-                await redisClient.setEx(
-                    cacheKey,
-                    TRANSCRIPT_CACHE_TTL_SECONDS,
-                    JSON.stringify(result),
-                );
-                return result;
-            }
-        }
 
         // 2. Transcript via youtube-transcript-plus, with browser-like headers
         // and bounded retry for transient failures.
