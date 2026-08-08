@@ -8,6 +8,22 @@ interface CaptionListItem {
   };
 }
 
+export class YoutubeCaptionPermissionError extends Error {
+  readonly videoId: string;
+  readonly operation: "list" | "download";
+
+  constructor(videoId: string, operation: "list" | "download") {
+    super(
+      operation === "download"
+        ? `The connected YouTube account cannot download captions for video ${videoId}.`
+        : `The connected YouTube account cannot access captions for video ${videoId}.`,
+    );
+    this.name = "YoutubeCaptionPermissionError";
+    this.videoId = videoId;
+    this.operation = operation;
+  }
+}
+
 function parseVttToText(vtt: string): string {
   return vtt
     .split(/\r?\n/)
@@ -41,6 +57,9 @@ export async function getAuthorizedYouTubeTranscript(
   listUrl.searchParams.set("videoId", videoId);
 
   const listResponse = await fetch(listUrl, { headers: authorization });
+  if (listResponse.status === 401 || listResponse.status === 403) {
+    throw new YoutubeCaptionPermissionError(videoId, "list");
+  }
   if (!listResponse.ok) {
     throw new Error(`YouTube caption listing failed with status ${listResponse.status}`);
   }
@@ -54,6 +73,9 @@ export async function getAuthorizedYouTubeTranscript(
   const downloadUrl = new URL(`https://www.googleapis.com/youtube/v3/captions/${encodeURIComponent(caption.id)}`);
   downloadUrl.searchParams.set("tfmt", "vtt");
   const downloadResponse = await fetch(downloadUrl, { headers: authorization });
+  if (downloadResponse.status === 401 || downloadResponse.status === 403) {
+    throw new YoutubeCaptionPermissionError(videoId, "download");
+  }
   if (!downloadResponse.ok) {
     throw new Error(`YouTube caption download failed with status ${downloadResponse.status}`);
   }
