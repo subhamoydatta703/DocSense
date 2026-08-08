@@ -68,3 +68,24 @@ export const createFileDBYoutubeUrl = async (
 
   return { Document };
 };
+
+export const createFileDBYoutubeTranscript = async (
+  s3Key: string,
+  fileName: string,
+  originalName: string,
+  sourceUrl: string | undefined,
+  userId: string,
+) => {
+  const Document = await prisma.document.create({
+    data: {
+      fileName,
+      s3Key,
+      originalName,
+      sourceUrl,
+      sourceType: "YOUTUBE",
+      userId,
+    },
+  });
+
+  return { Document };
+};

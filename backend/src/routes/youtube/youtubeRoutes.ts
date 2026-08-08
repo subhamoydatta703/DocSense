@@ -3,6 +3,9 @@ import { authMiddleware } from "../../middlewares/authMiddleware";
 import type { AuthenticatedRequest } from "../../middlewares/authMiddleware";
 import { rateLimiter } from "../../middlewares/rateLimiterMiddleware";
 import { youtubeContent } from "../../controllers/youtube/youtubeController";
+import { uploadYoutubeTranscript } from "../../controllers/youtube/youtubeTranscriptController";
+import transcriptUpload from "../../middlewares/transcriptUploadMiddleware";
+import multer from "multer";
 import {
     buildGoogleAuthorizationUrl,
     getGoogleOAuthConfig,
@@ -21,6 +24,24 @@ import {
 const router = Router();
 
 router.post("/youtube", authMiddleware, rateLimiter, youtubeContent);
+
+router.post("/youtube/transcript-upload", authMiddleware, rateLimiter, (req, res, next) => {
+  transcriptUpload.single("transcript")(req, res, (err) => {
+    if (err instanceof multer.MulterError) {
+      const message = err.code === "LIMIT_FILE_SIZE"
+        ? "Transcript file exceeds the 2MB limit."
+        : `Upload error: ${err.message}`;
+      return res.status(400).json({ success: false, message });
+    }
+    if (err) {
+      return res.status(400).json({
+        success: false,
+        message: err instanceof Error ? err.message : "Transcript upload failed.",
+      });
+    }
+    return uploadYoutubeTranscript(req, res);
+  });
+});
 
 router.get("/youtube/oauth/start", authMiddleware, async (req, res) => {
     try {
