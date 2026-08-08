@@ -1,7 +1,7 @@
 import { createPartFromUri, createUserContent } from "@google/genai";
 import { ai } from "../../config/ai/ai";
 
-const TRANSCRIPTION_MODEL = process.env.GEMINI_TRANSCRIPTION_MODEL || "gemini-2.5-flash";
+const TRANSCRIPTION_MODEL = process.env.GEMINI_TRANSCRIPTION_MODEL || "gemini-3.6-flash";
 
 export async function transcribeUploadedMedia(
   buffer: Buffer,
