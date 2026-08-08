@@ -10,6 +10,7 @@ import { createFileDBYoutubeUrl } from "../../services/youtube/uploadYouTubeServ
 import {
     transcriptYoutubeVideo,
     YoutubeTranscriptUnavailableError,
+    YoutubeTranscriptRateLimitedError,
 } from "../../services/youtube/transcriptService";
 import { CreateWebUrlSchema, blockedHostnames, blockedRanges } from '../../utils/urlSecurity';
 // import { dns } from "bun"
@@ -122,6 +123,14 @@ export const youtubeContent = async (req: AuthenticatedRequest, res: Response) =
             return res.status(400).json({
                 success: false,
                 message: "This YouTube video does not have captions accessible to DocSense.",
+            });
+        }
+        if (error instanceof YoutubeTranscriptRateLimitedError) {
+            res.set("Retry-After", String(error.retryAfterSeconds));
+            return res.status(429).json({
+                success: false,
+                message: "YouTube is temporarily rate-limiting transcript requests. Please try again later.",
+                retryAfterSeconds: error.retryAfterSeconds,
             });
         }
         console.error("youtubeController error ", error);

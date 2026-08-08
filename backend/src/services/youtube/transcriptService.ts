@@ -5,6 +5,7 @@ import {
     YoutubeTranscriptNotAvailableLanguageError,
 } from "youtube-transcript-plus";
 import type { FetchParams } from "youtube-transcript-plus";
+import { redisClient } from "../../config/redis/redisCaching";
 
 // A real browser User-Agent avoids YouTube serving a consent/cookie-wall
 // page instead of the actual watch page, which is what makes the scraper
@@ -17,7 +18,8 @@ const BROWSER_HEADERS = {
 };
 
 const YOUTUBE_REQUEST_TIMEOUT_MS = 15_000;
-const TRANSCRIPT_RETRIES = 2;
+const TRANSCRIPT_RETRIES = 1;
+const TRANSCRIPT_CACHE_TTL_SECONDS = 86_400;
 
 type PlayerResponseForLogging = {
     playabilityStatus?: {
@@ -36,7 +38,21 @@ type PlayerResponseForLogging = {
 
 // Keep the request identity consistent across the watch page, InnerTube player,
 // and transcript requests. No browser session or authentication cookies are sent.
-async function fetchYouTube(params: FetchParams, stage: string): Promise<Response> {
+export class YoutubeTranscriptRateLimitedError extends Error {
+    readonly retryAfterSeconds: number;
+
+    constructor(retryAfterSeconds = 60) {
+        super("YouTube rate-limited transcript requests from this server.");
+        this.name = "YoutubeTranscriptRateLimitedError";
+        this.retryAfterSeconds = retryAfterSeconds;
+    }
+}
+
+async function fetchYouTube(
+    params: FetchParams,
+    stage: string,
+    videoId: string,
+): Promise<Response> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), YOUTUBE_REQUEST_TIMEOUT_MS);
     const abortFromCaller = () => controller.abort();
@@ -55,6 +71,19 @@ async function fetchYouTube(params: FetchParams, stage: string): Promise<Respons
         });
 
         console.info(`[YouTube transcript] ${stage}: HTTP ${response.status}`);
+
+        if (response.status === 429) {
+            const retryAfterHeader = response.headers.get("retry-after");
+            const retryAfterSeconds = retryAfterHeader && /^\d+$/.test(retryAfterHeader)
+                ? Math.min(Number(retryAfterHeader), 3_600)
+                : 60;
+
+            console.warn(
+                `[YouTube transcript] ${stage}: rate limited for ${videoId}; retry after ${retryAfterSeconds}s`,
+            );
+            throw new YoutubeTranscriptRateLimitedError(retryAfterSeconds);
+        }
+
         return response;
     } catch (error) {
         const errorName = error instanceof Error ? error.name : "UnknownError";
@@ -133,14 +162,29 @@ export const transcriptYoutubeVideo = async (videoUrl: string) => {
         console.log("Fetching video transcript...");
         const videoId = extractVideoId(videoUrl);
         const sourceUrl = `https://www.youtube.com/watch?v=${videoId}`;
+        const cacheKey = `youtube:transcript:${videoId}`;
+
+        try {
+            const cached = await redisClient.get(cacheKey);
+            if (cached) {
+                console.info(`[YouTube transcript] cache hit for ${videoId}`);
+                return JSON.parse(cached);
+            }
+        } catch (error) {
+            console.warn(
+                `[YouTube transcript] cache read failed for ${videoId}:`,
+                error instanceof Error ? error.name : "UnknownError",
+            );
+        }
 
         // 1. Metadata via oEmbed
-        const oembedRes = await fetch(
-            `https://www.youtube.com/oembed?url=${encodeURIComponent(sourceUrl)}&format=json`,
+        const oembedRes = await fetchYouTube(
             {
+                url: `https://www.youtube.com/oembed?url=${encodeURIComponent(sourceUrl)}&format=json`,
                 headers: BROWSER_HEADERS,
-                signal: AbortSignal.timeout(YOUTUBE_REQUEST_TIMEOUT_MS),
-            }
+            },
+            "metadata",
+            videoId,
         );
         if (!oembedRes.ok) {
             throw new Error(`oEmbed request failed with status ${oembedRes.status}`);
@@ -157,16 +201,19 @@ export const transcriptYoutubeVideo = async (videoUrl: string) => {
                 userAgent: BROWSER_HEADERS["User-Agent"],
                 retries: TRANSCRIPT_RETRIES,
                 retryDelay: 1_000,
-                videoFetch: (params) => fetchYouTube(params, "watch-page"),
+                videoFetch: (params) => fetchYouTube(params, "watch-page", videoId),
                 playerFetch: async (params) => {
-                    const response = await fetchYouTube(params, "player");
+                    const response = await fetchYouTube(params, "player", videoId);
                     await logPlayerResponse(response, videoId);
                     return response;
                 },
-                transcriptFetch: (params) => fetchYouTube(params, "transcript"),
+                transcriptFetch: (params) => fetchYouTube(params, "transcript", videoId),
             });
             transcriptContent = segments.map((s) => s.text).join(" ");
         } catch (transcriptErr: any) {
+            if (transcriptErr instanceof YoutubeTranscriptRateLimitedError) {
+                throw transcriptErr;
+            }
             if (isNoTranscriptError(transcriptErr)) {
                 console.warn(
                     `[YouTube transcript] no accessible captions for ${videoId}:`,
@@ -186,7 +233,21 @@ export const transcriptYoutubeVideo = async (videoUrl: string) => {
         console.log("Video ID:", videoId);
         console.log("Transcript Content:\n", transcriptContent);
 
-        return { transcriptContent, title, channel, videoId, sourceUrl };
+        const result = { transcriptContent, title, channel, videoId, sourceUrl };
+        try {
+            await redisClient.setEx(
+                cacheKey,
+                TRANSCRIPT_CACHE_TTL_SECONDS,
+                JSON.stringify(result),
+            );
+        } catch (error) {
+            console.warn(
+                `[YouTube transcript] cache write failed for ${videoId}:`,
+                error instanceof Error ? error.name : "UnknownError",
+            );
+        }
+
+        return result;
     } catch (error) {
         console.error("Error fetching video transcript:", error);
         throw error;
