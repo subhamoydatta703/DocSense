@@ -14,7 +14,7 @@ import ipaddr from 'ipaddr.js';
 import z from 'zod';
 
 
-export const webUrlContent = async (req: AuthenticatedRequest, res: Response) => {
+export const youtubeContent = async (req: AuthenticatedRequest, res: Response) => {
     try {
 
 
