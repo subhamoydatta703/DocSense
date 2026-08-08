@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Search, Plus, Loader2, FileUp, Trash2, Globe, Video, CheckCircle2 } from 'lucide-react';
+import { Search, Plus, Loader2, FileUp, Trash2, Globe, Video } from 'lucide-react';
 import { api } from '../api/apiClient';
 import type { Document } from '../App';
 import UploadModal from './UploadModal';
@@ -14,9 +14,6 @@ export default function Dashboard({ onSelectDocument }: DashboardProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [youtubeConnected, setYoutubeConnected] = useState(false);
-  const [youtubeBusy, setYoutubeBusy] = useState(false);
-  const [youtubeMessage, setYoutubeMessage] = useState<string | null>(null);
 
   // Load and fetch documents
   const fetchDocuments = async () => {
@@ -40,49 +37,6 @@ export default function Dashboard({ onSelectDocument }: DashboardProps) {
     fetchDocuments();
   }, []);
 
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    if (params.get('youtube') === 'connected') {
-      setYoutubeMessage('YouTube account connected.');
-      window.history.replaceState({}, document.title, window.location.pathname);
-    }
-
-    api.get('/youtube/oauth/status')
-      .then((response) => {
-        if (response.data?.success) setYoutubeConnected(Boolean(response.data.connected));
-      })
-      .catch(() => {
-        // Connection status is optional for using PDF and web sources.
-      });
-  }, []);
-
-  const handleConnectYouTube = async () => {
-    setYoutubeBusy(true);
-    setYoutubeMessage(null);
-    try {
-      const response = await api.get('/youtube/oauth/start');
-      const authorizationUrl = response.data?.authorizationUrl;
-      if (!authorizationUrl) throw new Error('Authorization URL was not returned.');
-      window.location.assign(authorizationUrl);
-    } catch (error: any) {
-      setYoutubeMessage(error.response?.data?.message || 'Unable to connect YouTube.');
-      setYoutubeBusy(false);
-    }
-  };
-
-  const handleDisconnectYouTube = async () => {
-    if (!confirm('Disconnect your YouTube account from DocSense?')) return;
-    setYoutubeBusy(true);
-    try {
-      await api.delete('/youtube/oauth');
-      setYoutubeConnected(false);
-      setYoutubeMessage('YouTube account disconnected.');
-    } catch (error: any) {
-      setYoutubeMessage(error.response?.data?.message || 'Unable to disconnect YouTube.');
-    } finally {
-      setYoutubeBusy(false);
-    }
-  };
 
   // Poll status of processing/pending documents
   useEffect(() => {
@@ -174,15 +128,6 @@ export default function Dashboard({ onSelectDocument }: DashboardProps) {
 
           <div className="flex items-center gap-2 ml-4 shrink-0">
             <button
-              onClick={youtubeConnected ? handleDisconnectYouTube : handleConnectYouTube}
-              disabled={youtubeBusy}
-              className="border border-stone-200 dark:border-gray-800 hover:border-red-400 dark:hover:border-red-400 px-3 py-2 rounded-md text-xs font-mono uppercase tracking-wider font-semibold flex items-center gap-2 transition-all duration-150 disabled:opacity-50"
-              title={youtubeConnected ? 'Disconnect YouTube' : 'Connect YouTube'}
-            >
-              {youtubeConnected ? <CheckCircle2 className="h-4 w-4 text-emerald-500" /> : <Video className="h-4 w-4 text-red-500" />}
-              {youtubeConnected ? 'YouTube Connected' : 'Connect YouTube'}
-            </button>
-            <button
               onClick={() => setIsUploadOpen(true)}
               className="bg-[#C4791F] dark:bg-brand-accent hover:opacity-90 text-white dark:text-black px-4 py-2 rounded-md text-xs font-mono uppercase tracking-wider font-semibold flex items-center gap-2 transition-all duration-150"
             >
@@ -200,9 +145,6 @@ export default function Dashboard({ onSelectDocument }: DashboardProps) {
               Ask questions and search through your uploaded files
             </p>
             <span className="text-[9px] font-mono text-stone-400 dark:text-gray-600 block mt-1">REPRESENTED IN RELATIONAL AND VECTOR SCHEMA</span>
-            {youtubeMessage && (
-              <p className="text-xs text-stone-500 dark:text-brand-muted mt-3">{youtubeMessage}</p>
-            )}
           </div>
 
           {/* Loaders and Grid states */}

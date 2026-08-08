@@ -23,12 +23,18 @@ function UploadModal({ onClose, onSuccess }: UploadModalProps) {
   // URL & YouTube state
   const [urlValue, setUrlValue] = useState('');
   const [youtubeValue, setYoutubeValue] = useState('');
+  const [mediaFile, setMediaFile] = useState<File | null>(null);
+  const mediaInputRef = useRef<HTMLInputElement>(null);
+  const [transcriptFile, setTranscriptFile] = useState<File | null>(null);
+  const transcriptInputRef = useRef<HTMLInputElement>(null);
 
   const resetState = () => {
     setError(null);
     setFile(null);
     setUrlValue('');
     setYoutubeValue('');
+    setMediaFile(null);
+    setTranscriptFile(null);
     setIsUploading(false);
   };
 
@@ -200,6 +206,12 @@ function UploadModal({ onClose, onSuccess }: UploadModalProps) {
   };
 
   const handleYoutubeSubmit = async () => {
+    if (transcriptFile) {
+      return processYoutubeTranscript(transcriptFile);
+    }
+    if (mediaFile) {
+      return processYoutubeMedia(mediaFile);
+    }
     const trimmed = youtubeValue.trim();
     if (!trimmed) {
       setError("Please enter a YouTube video URL.");
@@ -210,6 +222,104 @@ function UploadModal({ onClose, onSuccess }: UploadModalProps) {
       return;
     }
     return processYouTubeUrl(trimmed);
+  };
+
+  const validateAndSetTranscriptFile = (selectedFile: File) => {
+    setError(null);
+    if (selectedFile.type !== 'text/plain' || !selectedFile.name.toLowerCase().endsWith('.txt')) {
+      setError('Upload a plain-text transcript file (.txt).');
+      return;
+    }
+    if (selectedFile.size > 2 * 1024 * 1024) {
+      setError('Transcript file exceeds the 2MB size limit.');
+      return;
+    }
+    setTranscriptFile(selectedFile);
+  };
+
+  const processYoutubeTranscript = async (selectedFile: File) => {
+    setIsUploading(true);
+    setError(null);
+    const formData = new FormData();
+    formData.append('transcript', selectedFile);
+    if (youtubeValue.trim()) formData.append('sourceUrl', youtubeValue.trim());
+
+    try {
+      const response = await api.post('/youtube/transcript-upload', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      if (response.data?.success) {
+        const fileData = response.data.fileData.Document;
+        onSuccess({
+          id: fileData.id,
+          originalName: fileData.originalName,
+          s3Key: fileData.s3Key || '',
+          status: fileData.status || 'PENDING',
+          createdAt: fileData.createdAt || new Date().toISOString(),
+          sourceType: fileData.sourceType || 'YOUTUBE',
+          sourceUrl: fileData.sourceUrl,
+        });
+        onClose();
+      } else {
+        setError(response.data?.message || 'Failed to upload transcript.');
+        setIsUploading(false);
+      }
+    } catch (err: any) {
+      setError(err.response?.data?.message || err.message || 'Failed to upload transcript.');
+      setIsUploading(false);
+    }
+  };
+
+  const validateAndSetMediaFile = (selectedFile: File) => {
+    setError(null);
+    const allowedTypes = new Set([
+      'audio/aac', 'audio/flac', 'audio/mpeg', 'audio/mp3', 'audio/mp4', 'audio/ogg',
+      'audio/wav', 'audio/webm', 'video/mp4', 'video/mpeg', 'video/quicktime',
+      'video/webm',
+    ]);
+    const allowedExtensions = /\.(aac|flac|mp3|mpeg|mp4|m4a|mov|ogg|wav|webm)$/i;
+    if (!allowedTypes.has(selectedFile.type) || !allowedExtensions.test(selectedFile.name)) {
+      setError('Upload a supported audio or video file.');
+      return;
+    }
+    if (selectedFile.size > 50 * 1024 * 1024) {
+      setError('Media file exceeds the 50MB size limit.');
+      return;
+    }
+    setMediaFile(selectedFile);
+  };
+
+  const processYoutubeMedia = async (selectedFile: File) => {
+    setIsUploading(true);
+    setError(null);
+    const formData = new FormData();
+    formData.append('media', selectedFile);
+    if (youtubeValue.trim()) formData.append('sourceUrl', youtubeValue.trim());
+
+    try {
+      const response = await api.post('/youtube/media-upload', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      if (response.data?.success) {
+        const fileData = response.data.fileData.Document;
+        onSuccess({
+          id: fileData.id,
+          originalName: fileData.originalName,
+          s3Key: fileData.s3Key || '',
+          status: fileData.status || 'PENDING',
+          createdAt: fileData.createdAt || new Date().toISOString(),
+          sourceType: fileData.sourceType || 'YOUTUBE',
+          sourceUrl: fileData.sourceUrl,
+        });
+        onClose();
+      } else {
+        setError(response.data?.message || 'Failed to transcribe media.');
+        setIsUploading(false);
+      }
+    } catch (err: any) {
+      setError(err.response?.data?.message || err.message || 'Failed to transcribe media.');
+      setIsUploading(false);
+    }
   };
 
   const processYouTubeUrl = async (urlStr: string) => {
@@ -373,8 +483,48 @@ function UploadModal({ onClose, onSuccess }: UploadModalProps) {
                 />
               </div>
               <p className="text-xs text-stone-500 dark:text-brand-muted">
-                Enter a public YouTube video URL. The transcript will be extracted and indexed for Q&A.
+                Enter a public YouTube video URL. If its transcript is unavailable, upload the media or a transcript file instead.
               </p>
+              <div className="border border-dashed border-stone-200 dark:border-gray-800 rounded-lg p-3">
+                <input
+                  ref={mediaInputRef}
+                  type="file"
+                  accept="audio/*,video/*"
+                  onChange={(e) => {
+                    if (e.target.files?.[0]) validateAndSetMediaFile(e.target.files[0]);
+                  }}
+                  className="hidden"
+                  disabled={isUploading}
+                />
+                <button
+                  type="button"
+                  onClick={() => mediaInputRef.current?.click()}
+                  disabled={isUploading}
+                  className="text-xs text-stone-600 dark:text-brand-muted hover:text-[#C4791F] dark:hover:text-brand-accent"
+                >
+                  {mediaFile ? `Selected: ${mediaFile.name}` : 'Or upload audio/video for transcription (up to 50MB)'}
+                </button>
+              </div>
+              <div className="border border-dashed border-stone-200 dark:border-gray-800 rounded-lg p-3">
+                <input
+                  ref={transcriptInputRef}
+                  type="file"
+                  accept=".txt,text/plain"
+                  onChange={(e) => {
+                    if (e.target.files?.[0]) validateAndSetTranscriptFile(e.target.files[0]);
+                  }}
+                  className="hidden"
+                  disabled={isUploading}
+                />
+                <button
+                  type="button"
+                  onClick={() => transcriptInputRef.current?.click()}
+                  disabled={isUploading}
+                  className="text-xs text-stone-600 dark:text-brand-muted hover:text-[#C4791F] dark:hover:text-brand-accent"
+                >
+                  {transcriptFile ? `Selected: ${transcriptFile.name}` : 'Or upload an existing transcript (.txt, up to 2MB)'}
+                </button>
+              </div>
             </div>
           )}
 
@@ -408,7 +558,7 @@ function UploadModal({ onClose, onSuccess }: UploadModalProps) {
                   ? (!file || isUploading)
                   : activeTab === 'url'
                   ? (!urlValue.trim() || isUploading)
-                  : (!youtubeValue.trim() || isUploading)
+                  : ((!youtubeValue.trim() && !mediaFile && !transcriptFile) || isUploading)
               }
               className="bg-[#C4791F] dark:bg-brand-accent hover:opacity-90 disabled:opacity-50 text-white dark:text-black px-5 py-2 rounded-lg text-sm font-semibold transition-colors flex items-center gap-2"
             >
@@ -418,7 +568,7 @@ function UploadModal({ onClose, onSuccess }: UploadModalProps) {
                   {activeTab === 'pdf' ? 'Uploading...' : 'Fetching...'}
                 </>
               ) : (
-                activeTab === 'pdf' ? "Upload File" : "Fetch & Index"
+                activeTab === 'pdf' ? "Upload File" : transcriptFile ? "Upload & Index" : mediaFile ? "Transcribe & Index" : "Fetch & Index"
               )}
             </button>
           </div>
