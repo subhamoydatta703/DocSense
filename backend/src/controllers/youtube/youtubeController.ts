@@ -58,7 +58,7 @@ export const youtubeContent = async (req: AuthenticatedRequest, res: Response) =
 
         }
 
-        const { transcriptContent, title, channel, videoId, sourceUrl } = await transcriptYoutubeVideo(validated.url);
+        const { transcriptContent, title, channel, videoId, sourceUrl } = await transcriptYoutubeVideo(validated.url, req.userId);
 
 
         const userId = req.userId!;

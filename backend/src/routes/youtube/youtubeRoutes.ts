@@ -12,7 +12,11 @@ import {
     consumeYouTubeOAuthState,
     createYouTubeOAuthState,
 } from "../../services/youtube/oauthStateService";
-import { saveGoogleOAuthTokens } from "../../services/youtube/oauthTokenService";
+import {
+    deleteGoogleOAuthTokens,
+    getGoogleOAuthTokens,
+    saveGoogleOAuthTokens,
+} from "../../services/youtube/oauthTokenService";
 
 const router = Router();
 
@@ -26,7 +30,10 @@ router.get("/youtube/oauth/start", authMiddleware, async (req, res) => {
         }
 
         const state = await createYouTubeOAuthState(userId);
-        return res.redirect(buildGoogleAuthorizationUrl(state));
+        return res.json({
+            success: true,
+            authorizationUrl: buildGoogleAuthorizationUrl(state),
+        });
     } catch (error) {
         console.error("YouTube OAuth start error:", error);
         return res.status(500).json({
@@ -111,16 +118,48 @@ router.get("/youtube/oauth/callback", async (req, res) => {
             tokenType: typeof tokenPayload.token_type === "string" ? tokenPayload.token_type : undefined,
         });
 
-        return res.json({
-            success: true,
-            message: "YouTube account connected successfully.",
-        });
+        const frontendUrl = (process.env.FRONTEND_URL || "http://localhost:5173")
+            .split(",")[0]!
+            .trim();
+        const redirectUrl = new URL(frontendUrl);
+        redirectUrl.searchParams.set("youtube", "connected");
+        return res.redirect(redirectUrl.toString());
     } catch (error) {
         console.error("YouTube OAuth callback error:", error);
         return res.status(500).json({
             success: false,
             message: "Unable to complete YouTube authorization.",
         });
+    }
+});
+
+router.get("/youtube/oauth/status", authMiddleware, async (req, res) => {
+    try {
+        const userId = (req as AuthenticatedRequest).userId;
+        if (!userId) {
+            return res.status(401).json({ success: false, message: "Unauthorized" });
+        }
+
+        const tokens = await getGoogleOAuthTokens(userId);
+        return res.json({ success: true, connected: Boolean(tokens) });
+    } catch (error) {
+        console.error("YouTube OAuth status error:", error);
+        return res.status(500).json({ success: false, message: "Unable to read YouTube connection status." });
+    }
+});
+
+router.delete("/youtube/oauth", authMiddleware, async (req, res) => {
+    try {
+        const userId = (req as AuthenticatedRequest).userId;
+        if (!userId) {
+            return res.status(401).json({ success: false, message: "Unauthorized" });
+        }
+
+        await deleteGoogleOAuthTokens(userId);
+        return res.json({ success: true, message: "YouTube account disconnected." });
+    } catch (error) {
+        console.error("YouTube OAuth disconnect error:", error);
+        return res.status(500).json({ success: false, message: "Unable to disconnect YouTube." });
     }
 });
 

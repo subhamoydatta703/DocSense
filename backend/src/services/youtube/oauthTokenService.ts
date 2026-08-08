@@ -1,5 +1,6 @@
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import { redisClient } from "../../config/redis/redisCaching";
+import { getGoogleOAuthConfig, getGoogleTokenUrl } from "../../config/youtube/googleOAuth";
 
 const TOKEN_PREFIX = "youtube:oauth:tokens:";
 
@@ -72,4 +73,54 @@ export async function getGoogleOAuthTokens(
 
 export async function deleteGoogleOAuthTokens(userId: string): Promise<void> {
   await redisClient.del(`${TOKEN_PREFIX}${userId}`);
+}
+
+export async function getValidGoogleAccessToken(userId: string): Promise<string | null> {
+  const tokens = await getGoogleOAuthTokens(userId);
+  if (!tokens) {
+    return null;
+  }
+
+  if (tokens.expiresAt > Date.now() + 60_000) {
+    return tokens.accessToken;
+  }
+
+  const config = getGoogleOAuthConfig();
+  const response = await fetch(getGoogleTokenUrl(), {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: config.clientId,
+      client_secret: config.clientSecret,
+      refresh_token: tokens.refreshToken,
+      grant_type: "refresh_token",
+    }),
+  });
+
+  if (!response.ok) {
+    console.error("Google OAuth token refresh failed with status", response.status);
+    throw new Error("YouTube authorization has expired or been revoked");
+  }
+
+  const payload = await response.json() as {
+    access_token?: unknown;
+    expires_in?: unknown;
+    scope?: unknown;
+    token_type?: unknown;
+  };
+
+  if (typeof payload.access_token !== "string" || typeof payload.expires_in !== "number") {
+    throw new Error("Google returned an invalid refreshed access token");
+  }
+
+  const refreshedTokens: GoogleOAuthTokens = {
+    accessToken: payload.access_token,
+    refreshToken: tokens.refreshToken,
+    expiresAt: Date.now() + payload.expires_in * 1000,
+    scope: typeof payload.scope === "string" ? payload.scope : tokens.scope,
+    tokenType: typeof payload.token_type === "string" ? payload.token_type : tokens.tokenType,
+  };
+
+  await saveGoogleOAuthTokens(userId, refreshedTokens);
+  return refreshedTokens.accessToken;
 }
