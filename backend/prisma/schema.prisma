@@ -23,6 +23,7 @@ enum SourceType {
   PDF
   WEBSITE
   YOUTUBE
+  TEXT
 }
 
 model User {
