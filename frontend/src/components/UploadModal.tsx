@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { X, Upload, FileText, Loader2, AlertTriangle, Globe, Link, Video } from 'lucide-react';
+import { X, Upload, FileText, Loader2, AlertTriangle, Globe, Link, Video, AlignLeft } from 'lucide-react';
 import { api } from '../api/apiClient';
 import type { Document } from '../App';
 
@@ -8,7 +8,7 @@ interface UploadModalProps {
   onSuccess: (doc: Document) => void;
 }
 
-type UploadTab = 'pdf' | 'url' | 'youtube';
+type UploadTab = 'pdf' | 'url' | 'youtube' | 'text';
 
 function UploadModal({ onClose, onSuccess }: UploadModalProps) {
   const [activeTab, setActiveTab] = useState<UploadTab>('pdf');
@@ -28,6 +28,10 @@ function UploadModal({ onClose, onSuccess }: UploadModalProps) {
   const [transcriptFile, setTranscriptFile] = useState<File | null>(null);
   const transcriptInputRef = useRef<HTMLInputElement>(null);
 
+  // Text state
+  const [textTitle, setTextTitle] = useState('');
+  const [textContent, setTextContent] = useState('');
+
   const resetState = () => {
     setError(null);
     setFile(null);
@@ -35,6 +39,8 @@ function UploadModal({ onClose, onSuccess }: UploadModalProps) {
     setYoutubeValue('');
     setMediaFile(null);
     setTranscriptFile(null);
+    setTextTitle('');
+    setTextContent('');
     setIsUploading(false);
   };
 
@@ -355,6 +361,62 @@ function UploadModal({ onClose, onSuccess }: UploadModalProps) {
     }
   };
 
+  // ─── Text Handlers ───
+  const handleTextSubmit = async () => {
+    const trimmedTitle = textTitle.trim();
+    const trimmedText = textContent.trim();
+    if (!trimmedTitle) {
+      setError("Please enter a document title.");
+      return;
+    }
+    if (!trimmedText) {
+      setError("Please enter or paste text content.");
+      return;
+    }
+    if (trimmedText.length < 20) {
+      setError("Text content must be at least 20 characters long.");
+      return;
+    }
+    if (trimmedText.length > 500000) {
+      setError("Text content exceeds the 500,000 character limit.");
+      return;
+    }
+
+    setIsUploading(true);
+    setError(null);
+
+    try {
+      const response = await api.post('/text', {
+        title: trimmedTitle,
+        text: trimmedText,
+      });
+
+      if (response.data && response.data.success) {
+        const fileData = response.data.fileData.Document;
+        onSuccess({
+          id: fileData.id,
+          originalName: fileData.originalName,
+          s3Key: fileData.s3Key || '',
+          status: fileData.status || 'PENDING',
+          createdAt: fileData.createdAt || new Date().toISOString(),
+          sourceType: fileData.sourceType || 'TEXT',
+          sourceUrl: fileData.sourceUrl,
+        });
+        onClose();
+      } else {
+        setError(response.data.message || "Failed to process pasted text.");
+        setIsUploading(false);
+      }
+    } catch (err: any) {
+      const backendErrors = err.response?.data?.errors;
+      const errorMsg = backendErrors && backendErrors.length > 0
+        ? backendErrors.map((e: any) => e.message).join(', ')
+        : err.response?.data?.message || err.message;
+      setError(errorMsg || "Failed to submit text content.");
+      setIsUploading(false);
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
       {/* Modal Card */}
@@ -403,6 +465,17 @@ function UploadModal({ onClose, onSuccess }: UploadModalProps) {
             >
               <Video className="h-3.5 w-3.5 text-red-500 dark:text-red-400" />
               YouTube
+            </button>
+            <button
+              onClick={() => handleTabSwitch('text')}
+              className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-md text-xs font-mono uppercase tracking-wider font-semibold transition-all duration-200 ${
+                activeTab === 'text'
+                  ? 'bg-white dark:bg-brand-card text-[#C4791F] dark:text-brand-accent shadow-sm'
+                  : 'text-stone-500 dark:text-brand-muted hover:text-[#1A1815] dark:hover:text-brand-text'
+              }`}
+            >
+              <AlignLeft className="h-3.5 w-3.5" />
+              Text
             </button>
           </div>
 
@@ -528,6 +601,46 @@ function UploadModal({ onClose, onSuccess }: UploadModalProps) {
             </div>
           )}
 
+          {/* ─── Text Tab Content ─── */}
+          {activeTab === 'text' && (
+            <div className="flex flex-col gap-3">
+              <div>
+                <label className="text-xs font-mono uppercase tracking-wider text-stone-500 dark:text-brand-muted block mb-1">
+                  Document Title
+                </label>
+                <input
+                  type="text"
+                  value={textTitle}
+                  onChange={(e) => { setTextTitle(e.target.value); setError(null); }}
+                  placeholder="e.g. Project Notes, Architecture Overview"
+                  disabled={isUploading}
+                  className="w-full bg-white dark:bg-[#1A1918] border border-stone-200 dark:border-gray-800 rounded-lg px-3.5 py-2 text-sm text-[#1A1815] dark:text-brand-text placeholder:text-stone-400 dark:placeholder:text-brand-muted focus:outline-none focus:border-[#C4791F] dark:focus:border-brand-accent focus:ring-1 focus:ring-[#C4791F]/20 dark:focus:ring-brand-accent/20 transition-all duration-150 disabled:opacity-50"
+                />
+              </div>
+              <div>
+                <div className="flex justify-between items-center mb-1">
+                  <label className="text-xs font-mono uppercase tracking-wider text-stone-500 dark:text-brand-muted block">
+                    Text Content
+                  </label>
+                  <span className="text-[10px] font-mono text-stone-400 dark:text-gray-500">
+                    {textContent.length.toLocaleString()} / 500,000 chars
+                  </span>
+                </div>
+                <textarea
+                  rows={6}
+                  value={textContent}
+                  onChange={(e) => { setTextContent(e.target.value); setError(null); }}
+                  placeholder="Paste or type your raw document text here..."
+                  disabled={isUploading}
+                  className="w-full bg-white dark:bg-[#1A1918] border border-stone-200 dark:border-gray-800 rounded-lg p-3 text-xs font-mono text-[#1A1815] dark:text-brand-text placeholder:text-stone-400 dark:placeholder:text-brand-muted focus:outline-none focus:border-[#C4791F] dark:focus:border-brand-accent focus:ring-1 focus:ring-[#C4791F]/20 dark:focus:ring-brand-accent/20 transition-all duration-150 disabled:opacity-50 resize-none"
+                />
+              </div>
+              <p className="text-xs text-stone-500 dark:text-brand-muted">
+                Raw text will be saved, indexed, and made available for Q&A search.
+              </p>
+            </div>
+          )}
+
           {/* Validation Error Alert */}
           {error && (
             <div className="p-3.5 bg-rose-500/10 border border-rose-500/20 text-rose-400 rounded-lg text-sm flex items-start gap-2.5">
@@ -551,24 +664,28 @@ function UploadModal({ onClose, onSuccess }: UploadModalProps) {
                   ? handleUploadSubmit
                   : activeTab === 'url'
                   ? handleUrlSubmit
-                  : handleYoutubeSubmit
+                  : activeTab === 'youtube'
+                  ? handleYoutubeSubmit
+                  : handleTextSubmit
               }
               disabled={
                 activeTab === 'pdf'
                   ? (!file || isUploading)
                   : activeTab === 'url'
                   ? (!urlValue.trim() || isUploading)
-                  : ((!youtubeValue.trim() && !mediaFile && !transcriptFile) || isUploading)
+                  : activeTab === 'youtube'
+                  ? ((!youtubeValue.trim() && !mediaFile && !transcriptFile) || isUploading)
+                  : (!textTitle.trim() || !textContent.trim() || textContent.trim().length < 20 || isUploading)
               }
               className="bg-[#C4791F] dark:bg-brand-accent hover:opacity-90 disabled:opacity-50 text-white dark:text-black px-5 py-2 rounded-lg text-sm font-semibold transition-colors flex items-center gap-2"
             >
               {isUploading ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  {activeTab === 'pdf' ? 'Uploading...' : 'Fetching...'}
+                  {activeTab === 'pdf' ? 'Uploading...' : activeTab === 'text' ? 'Indexing...' : 'Fetching...'}
                 </>
               ) : (
-                activeTab === 'pdf' ? "Upload File" : transcriptFile ? "Upload & Index" : mediaFile ? "Transcribe & Index" : "Fetch & Index"
+                activeTab === 'pdf' ? "Upload File" : activeTab === 'text' ? "Save & Index" : transcriptFile ? "Upload & Index" : mediaFile ? "Transcribe & Index" : "Fetch & Index"
               )}
             </button>
           </div>
