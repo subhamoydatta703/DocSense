@@ -7,6 +7,7 @@ import uploadRoutes from "./routes/document/multerRoutes";
 import queryRoutes from "./routes/query/queryRoutes";
 import weburlRoutes from "./routes/web-url/weburlRoutes";
 import youtubeRoutes from "./routes/youtube/youtubeRoutes";
+import textRoutes from "./routes/text/textRoutes";
 
 const app = express();
 
@@ -46,6 +47,7 @@ app.use("/api", uploadRoutes);
 app.use("/api", queryRoutes);
 app.use("/api", weburlRoutes);
 app.use("/api", youtubeRoutes);
+app.use("/api", textRoutes);
 
 // Health Check Route
 app.get("/health", async (req, res) => {

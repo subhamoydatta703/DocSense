@@ -1,5 +1,5 @@
 import type { Response } from "express";
-import { createFileDB } from "../../services/document/uploadDocumentService";
+import { createFileDB, deleteDocumentService } from "../../services/document/uploadDocumentService";
 import { uploadFile } from "../../services/storage/s3storageService";
 import type { AuthenticatedRequest } from "../../middlewares/authMiddleware";
 import { DocumentQueue } from "../../queue/documentQueue";
@@ -70,7 +70,7 @@ export const getDocumentById = async (req: AuthenticatedRequest, res: Response) 
   try {
     const userId = req.userId!;
     const documentId = req.params.documentId as string;
-    const document = await prisma.document.findUnique({
+    const document = await prisma.document.findFirst({
       where: { id: documentId, userId: userId },
     });
     if (!document) {
@@ -125,11 +125,7 @@ export const deleteDocument = async (req: AuthenticatedRequest, res: Response) =
     const userId = req.userId!;
     const documentId = req.params.documentId as string;
 
-    
-
-    await prisma.document.delete({
-      where: { id: documentId, userId: userId },
-    });
+    await deleteDocumentService(documentId, userId);
 
     return res.status(200).json({
       success: true,

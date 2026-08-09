@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Search, Plus, Loader2, FileUp, Trash2, Globe, Video } from 'lucide-react';
+import { Search, Plus, Loader2, FileUp, Trash2, Globe, Video, AlignLeft } from 'lucide-react';
 import { api } from '../api/apiClient';
 import type { Document } from '../App';
 import UploadModal from './UploadModal';
@@ -220,6 +220,11 @@ export default function Dashboard({ onSelectDocument }: DashboardProps) {
                       <div className="h-16 w-12 border border-stone-200 dark:border-gray-850 bg-[#FAF8F3] dark:bg-[#0A0A0B] rounded flex flex-col items-center justify-center gap-1 shrink-0 select-none relative group-hover:border-[#C4791F]/20 dark:group-hover:border-brand-accent/20 transition-colors">
                         <Globe className="h-5 w-5 text-[#C4791F] dark:text-brand-accent" />
                         <span className="text-[6px] font-mono text-[#C4791F] dark:text-brand-accent font-bold uppercase tracking-tighter">WEB</span>
+                      </div>
+                    ) : doc.sourceType === 'TEXT' ? (
+                      <div className="h-16 w-12 border border-stone-200 dark:border-gray-850 bg-[#FAF8F3] dark:bg-[#0A0A0B] rounded flex flex-col items-center justify-center gap-1 shrink-0 select-none relative group-hover:border-[#C4791F]/20 dark:group-hover:border-brand-accent/20 transition-colors">
+                        <AlignLeft className="h-5 w-5 text-[#C4791F] dark:text-brand-accent" />
+                        <span className="text-[6px] font-mono text-[#C4791F] dark:text-brand-accent font-bold uppercase tracking-tighter">TEXT</span>
                       </div>
                     ) : (
                       <div className="h-16 w-12 border border-stone-200 dark:border-gray-850 bg-[#FAF8F3] dark:bg-[#0A0A0B] rounded flex flex-col justify-between p-1.5 shrink-0 select-none relative group-hover:border-[#C4791F]/20 dark:group-hover:border-brand-accent/20 transition-colors">
