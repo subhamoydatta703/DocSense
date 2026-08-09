@@ -1,6 +1,6 @@
 # DocSense Backend
 
-The backend engine for DocSense is built on **Bun** and **Express**. It handles document management, orchestrates the ingestion pipeline (PDF, web URLs, and YouTube sources), performs database vector operations, and interfaces with LLM endpoints.
+The backend engine for DocSense is built on **Bun** and **Express**. It handles document management, orchestrates the ingestion pipeline (PDF, web URLs, YouTube sources, and raw pasted text), performs database vector operations, and interfaces with LLM endpoints.
 
 ---
 
@@ -21,6 +21,7 @@ backend/
 │   ├── controllers/      # Route request handler controllers
 │   │   ├── document/     # PDF upload / fetch / list / delete handlers
 │   │   ├── query/        # Chat and Q&A workspace handlers
+│   │   ├── text/         # Raw text ingestion handler
 │   │   ├── web-url/      # Web URL ingestion handler
 │   │   └── youtube/      # YouTube URL, transcript-upload & media handlers
 │   ├── errors/           # Custom error types (e.g. GuardrailError)
@@ -29,9 +30,10 @@ backend/
 │   │   └── output/       # Leakage / PII / harmful-content detection
 │   ├── middlewares/      # Auth, Multer uploads, rate limiter, transcript/media upload
 │   ├── queue/            # BullMQ queue definition
-│   ├── routes/           # Routing layers (document, query, web-url, youtube)
+│   ├── routes/           # Routing layers (document, query, text, web-url, youtube)
 │   │   ├── document/
 │   │   ├── query/
+│   │   ├── text/
 │   │   ├── web-url/
 │   │   └── youtube/
 │   ├── services/         # Core business logic services
@@ -39,6 +41,7 @@ backend/
 │   │   ├── processing/   # Chunk / embed / vector pipeline coordinators
 │   │   ├── query/        # Guardrails, optimization, retrieval & Q&A logic
 │   │   ├── storage/      # S3 client wrapper for upload/download
+│   │   ├── text/         # Text document creation and duplicate override service
 │   │   ├── vectors/      # Cosine similarity and pgvector inserts
 │   │   ├── web-url/      # URL security & HTML-to-text extraction
 │   │   ├── worker/       # BullMQ worker job loops
@@ -58,6 +61,7 @@ backend/
 - **PDF ingestion** — Upload a PDF (max 5MB, 100 pages) that is stored to S3, enqueued on BullMQ, chunked via LangChain, embedded with Gemini, and indexed into `pgvector`.
 - **Web URL ingestion** — Submit an HTTPS URL. The backend validates public DNS resolution (SSRF protection), fetches with redirect / size / timeout caps, extracts readable text with Cheerio, and indexes it as a `WEBSITE` source.
 - **YouTube ingestion** — Three paths producing a `YOUTUBE` source: video URL transcript (Supadata provider with `youtube-transcript-plus` fallback), `.txt` transcript upload, and audio/video media transcription via the Gemini Files API.
+- **Raw Text ingestion** — Type or paste document text directly. Validated with Zod (title 1–250 chars, content 20–500,000 chars), stored to S3 as a UTF-8 text file, and indexed into `pgvector` as a `TEXT` source.
 - **Query pipeline** — Input guardrail → step-back query optimization → embedding → `pgvector` cosine similarity search (distance threshold) → grounded, cited answer → output guardrail.
 - **Rate limiting** — Every API route is protected by a Redis-backed fixed-window counter (max 20 requests / 60s), returning `429` when exceeded.
 
@@ -118,6 +122,7 @@ All routes are mounted under `/api` and require Clerk authentication plus rate l
 | `POST` | `/api/youtube` | Ingest a YouTube video via URL transcript |
 | `POST` | `/api/youtube/transcript-upload` | Upload a `.txt` transcript |
 | `POST` | `/api/youtube/media-upload` | Upload audio/video for transcription |
+| `POST` | `/api/text` | Ingest raw pasted text document |
 | `GET` | `/health` | Health check (DB connectivity) |
 
 ---

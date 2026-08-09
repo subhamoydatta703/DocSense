@@ -41,11 +41,12 @@ frontend/
 ## Screens & Features
 
 - **LandingPage** — Public marketing/landing page shown before sign-in.
-- **Dashboard** — Lists the signed-in user's documents with status, source type (PDF / Web / YouTube), and search; also hosts the ingestion dialog.
-- **UploadModal** — Three ingestion tabs:
+- **Dashboard** — Lists the signed-in user's documents with status, source type badges (PDF / Web / YouTube / Text), and search; also hosts the ingestion dialog.
+- **UploadModal** — Four ingestion tabs:
   - *PDF* — drag-and-drop upload (max 5MB).
   - *URL* — web page URL ingestion.
   - *YouTube* — video URL ingestion, `.txt` transcript upload (max 2MB), or audio/video media upload for transcription (max 50MB).
+  - *Text* — raw text area input with title field (max 500,000 chars).
 - **QAWorkspace** — Chat interface that sends queries to the backend, renders markdown answers, and surfaces source citations.
 - **ThemeContext** — Light/dark mode via a `dark` class on the document root.
 

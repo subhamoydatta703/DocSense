@@ -2,7 +2,7 @@
 
 **AI-powered document intelligence — parse, embed, and query unstructured documents through natural conversation.**
 
-DocSense ingests documents from three source types — **PDF files**, **web pages (URLs)**, and **YouTube videos/transcripts/media** — chunks and embeds them into a vector store, and exposes a retrieval-augmented Q&A interface so users can query their own knowledge base conversationally, with every answer traceable back to its source.
+DocSense ingests documents from four source types — **PDF files**, **web pages (URLs)**, **YouTube videos/transcripts/media**, and **raw pasted text** — chunks and embeds them into a vector store, and exposes a retrieval-augmented Q&A interface so users can query their own knowledge base conversationally, with every answer traceable back to its source.
 
 Every question is checked by an input guardrail, optimized for retrieval (step-back prompting), embedded and run through a `pgvector` similarity search, and answered only from the retrieved chunks. The generated answer is then passed through an output guardrail before being returned to the user.
 
@@ -105,6 +105,18 @@ A user ingests a YouTube source in one of three ways, all producing a `sourceTyp
 1. **Video URL** — the transcript is fetched (Supadata provider first if `SUPADATA_API_KEY` is set, otherwise the `youtube-transcript-plus` scraper), cached in Redis for 24h, and stored to S3 along with title/channel/videoId metadata.
 2. **Transcript file upload** — a plain-text `.txt` transcript (max 2MB) is stored to S3.
 3. **Audio/video media upload** — the media (magic-byte validated) is sent to the Gemini Files API for transcription, then stored to S3.
+
+### Raw Pasted Text ingestion flow
+
+```mermaid
+flowchart LR
+    A["Express API"] -->|"validate text"| B["Text Buffer"]
+    B -->|"store UTF-8 text file"| C["S3"]
+    A -->|"enqueue job"| D["Redis<br/>BullMQ queue"]
+    D -->|"chunk + embed"| E["PostgreSQL<br/>pgvector"]
+```
+
+A user types or pastes text directly into the application. The input is validated client-side and server-side (title 1–250 chars, content 20–500,000 chars), converted into a UTF-8 text buffer, saved to S3 (`text-sources/...`), and enqueued to BullMQ as `sourceType = TEXT` to run through the exact same chunking and embedding pipeline.
 
 ### Query flow
 
