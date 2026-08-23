@@ -2,6 +2,9 @@ import * as cheerio from 'cheerio';
 import { fetchPublicHtml } from "../../utils/urlSecurity";
 
 
+/**
+ * Fetches HTML from public URL, removes scripts/styles, and extracts readable body text and title.
+ */
 export const webUrlContentService = async (url: string): Promise<{ content: string; originalName: string }> => {
 
     try {

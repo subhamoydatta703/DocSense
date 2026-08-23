@@ -3,7 +3,9 @@ import {Readable} from "stream";
 import { PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
 
 
-// uploadfile to s3
+/**
+ * Uploads a file buffer to AWS S3 storage with AES256 server-side encryption.
+ */
 export const uploadFile = async (fileBuffer: Buffer , key: string): Promise<string> => {
     try {
         const command = new PutObjectCommand({
@@ -21,9 +23,9 @@ export const uploadFile = async (fileBuffer: Buffer , key: string): Promise<stri
 }
 
 
-// stream to buffer conversion
-
-// for node.js readable stream
+/**
+ * Converts Node or Web readable stream into a single Node.js Buffer.
+ */
 const streamToBuffer = async (stream: any): Promise<Buffer> => {
   // Handle web ReadableStream (Bun) by converting to Node stream
   if (typeof stream.on !== "function" && typeof stream.getReader === "function") {
@@ -37,7 +39,9 @@ const streamToBuffer = async (stream: any): Promise<Buffer> => {
   });
 };
 
-// get file to s3
+/**
+ * Downloads a file buffer from AWS S3 storage.
+ */
 export const getFile = async (key: string): Promise<Buffer> => {
 
     try {
@@ -60,8 +64,9 @@ export const getFile = async (key: string): Promise<Buffer> => {
 
 }
 
-// delete file from s3
-
+/**
+ * Deletes a file object from AWS S3 storage.
+ */
 export const deleteFile = async (key: string): Promise<void> => {
     try {
         const command = new DeleteObjectCommand({

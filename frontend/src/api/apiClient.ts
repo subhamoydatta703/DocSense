@@ -6,6 +6,9 @@ export const api = axios.create({
 
 let getTokenFn: (() => Promise<string | null>) | null = null;
 
+/**
+ * Registers the Clerk JWT getter function for automatic HTTP Authorization header injection.
+ */
 export const setAuthTokenGetter = (fn: () => Promise<string | null>) => {
   getTokenFn = fn;
 };

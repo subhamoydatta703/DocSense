@@ -11,6 +11,9 @@ interface QAWorkspaceProps {
   onBack: () => void;
 }
 
+/**
+ * Renders interactive Q&A workspace chat panel and document metadata inspector.
+ */
 export default function QAWorkspace({ document, onBack }: QAWorkspaceProps) {
   const [messages, setMessages] = useState<Message[]>([
     {

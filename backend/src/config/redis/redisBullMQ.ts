@@ -2,6 +2,9 @@ import IORedis from "ioredis";
 
 const bullmqUrlString = process.env.BULLMQ_REDIS_URL?.trim();
 
+/**
+ * Creates and configures an IORedis connection instance for BullMQ queue operations.
+ */
 function createBullRedisConnection(): IORedis {
   if (bullmqUrlString) {
     // Manually parse the URL to bypass IORedis string parsing quirks in Bun
@@ -33,7 +36,9 @@ bullRedisConnection.on("error", (err) => {
   console.error("[BullMQ Redis Error]:", err.message);
 });
 
-// Startup health check
+/**
+ * Performs a health check ping against the BullMQ Redis connection on startup.
+ */
 export async function verifyBullMQConnection() {
   try {
     const pingResponse = await bullRedisConnection.ping();

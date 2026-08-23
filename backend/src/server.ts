@@ -9,13 +9,16 @@ import { verifyBullMQConnection } from "./config/redis/redisBullMQ";
 import { startWorker } from "../src/services/worker/workerService";
 
 const PORT = process.env.PORT || 5000;
+
+/**
+ * Starts the Express HTTP server after verifying Redis cache, BullMQ, and worker connections.
+ */
 async function startServer() {
   try {
     // Health checks for both Redis instances
     await connectRedis();
     await verifyBullMQConnection();
     await startWorker();
-    console.log("Worker function called from server...")
     app.listen(PORT, () => {
       console.log(`Server is running on port ${PORT}`);
     });

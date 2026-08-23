@@ -10,21 +10,11 @@ import { CreateWebUrlSchema, assertPublicHttpsUrl } from '../../utils/urlSecurit
 import z from 'zod';
 
 
+/**
+ * Validates public HTTPS URL, fetches readable HTML content, uploads to S3, and enqueues vector indexing.
+ */
 export const webUrlContent = async (req: AuthenticatedRequest, res: Response) => {
     try {
-
-
-        // const url = req.body.url;
-        // if (!url) {
-        //     return res.status(400).json({
-        //         success: false,
-        //         message: "URL is required",
-        //     });
-        // }
-
-        // blocked hostname check
-
-        // security
         const validated = CreateWebUrlSchema.parse({ url: req.body.url });
 
         await assertPublicHttpsUrl(validated.url);
@@ -50,25 +40,12 @@ export const webUrlContent = async (req: AuthenticatedRequest, res: Response) =>
 
         console.info("Web source record created", { documentId: fileData.Document.id });
 
-        // add job to queue
-
-        const job = await DocumentQueue.add(
+        await DocumentQueue.add(
             "document-analysis",
             {
                 documentId: fileData.Document.id,
             },
-
         );
-        console.log(
-            "Added job",
-            job.id,
-            job.name
-        );
-
-        console.log("Job added successfully:", fileData.Document.id);
-
-        const counts = await DocumentQueue.getJobCounts();
-        console.log("QUEUE COUNTS:", counts);
 
 
 

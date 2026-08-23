@@ -5,6 +5,9 @@ import { DocumentQueue } from "../../queue/documentQueue";
 import { createFileDBYoutubeTranscript } from "../../services/youtube/uploadYouTubeService";
 import { CreateWebUrlSchema } from "../../utils/urlSecurity";
 
+/**
+ * Ingests an uploaded plain-text YouTube transcript file, stores to S3, and enqueues vector indexing.
+ */
 export const uploadYoutubeTranscript = async (
   req: AuthenticatedRequest,
   res: Response,

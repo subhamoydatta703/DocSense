@@ -3,6 +3,9 @@ import { redisClient } from "../../config/redis/redisCaching";
 import { deleteFile } from "../storage/s3storageService";
 import { deleteVectorsByDocumentId } from "../vectors/vectorService";
 
+/**
+ * Creates or updates a raw text document record in Postgres, overriding existing duplicates for the user.
+ */
 export const createFileDBText = async (
   s3Key: string,
   fileName: string,

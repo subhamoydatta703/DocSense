@@ -10,6 +10,9 @@ interface UploadModalProps {
 
 type UploadTab = 'pdf' | 'url' | 'youtube' | 'text';
 
+/**
+ * Renders 4-tab source ingestion dialog for PDF, Web URL, YouTube video/media/transcript, and Text.
+ */
 function UploadModal({ onClose, onSuccess }: UploadModalProps) {
   const [activeTab, setActiveTab] = useState<UploadTab>('pdf');
 

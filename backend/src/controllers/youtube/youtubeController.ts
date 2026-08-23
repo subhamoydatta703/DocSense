@@ -1,11 +1,7 @@
-
 import type { Response } from "express";
 import type { AuthenticatedRequest } from "../../middlewares/authMiddleware";
-import { webUrlContentService } from '../../services/web-url/weburlService';
 import { uploadFile } from '../../services/storage/s3storageService';
-
 import { DocumentQueue } from '../../queue/documentQueue';
-// import { createFileDBWebUrl } from '../../services/web-url/uploadWebUrlService';
 import { createFileDBYoutubeUrl } from "../../services/youtube/uploadYouTubeService";
 import {
     transcriptYoutubeVideo,
@@ -17,21 +13,11 @@ import { CreateWebUrlSchema, assertPublicHttpsUrl } from '../../utils/urlSecurit
 import z from 'zod';
 
 
+/**
+ * Fetches transcript for YouTube video URL, stores to S3, and enqueues vector indexing.
+ */
 export const youtubeContent = async (req: AuthenticatedRequest, res: Response) => {
     try {
-
-
-        // const url = req.body.url;
-        // if (!url) {
-        //     return res.status(400).json({
-        //         success: false,
-        //         message: "URL is required",
-        //     });
-        // }
-
-        // blocked hostname check
-
-        // security
         const validated = CreateWebUrlSchema.parse({ url: req.body.url });
 
         const parsedUrl = new URL(validated.url);
@@ -70,31 +56,16 @@ export const youtubeContent = async (req: AuthenticatedRequest, res: Response) =
         const buffer = Buffer.from(transcriptContent, "utf-8");
         const uploadedKey = await uploadFile(buffer, s3Key);
 
-        // Save to DB
-        // const fileData = await createFileDBWebUrl(uploadedKey, safeFileName, transcriptContent, validated.url, userId);
         const fileData = await createFileDBYoutubeUrl(uploadedKey, safeFileName, safeOriginalName, validated.url, userId);
 
         console.info("YouTube source record created", { documentId: fileData.Document.id });
 
-        // add job to queue
-
-        const job = await DocumentQueue.add(
+        await DocumentQueue.add(
             "document-analysis",
             {
                 documentId: fileData.Document.id,
             },
-
         );
-        console.log(
-            "Added job",
-            job.id,
-            job.name
-        );
-
-        console.log("Job added successfully:", fileData.Document.id);
-
-        const counts = await DocumentQueue.getJobCounts();
-        console.log("QUEUE COUNTS:", counts);
 
 
 

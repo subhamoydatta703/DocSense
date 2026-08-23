@@ -9,6 +9,9 @@ interface ThemeContextType {
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
+/**
+ * Provides light and dark theme context state and manages the dark class on the document element.
+ */
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, setTheme] = useState<Theme>('dark');
 
@@ -32,6 +35,9 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
+/**
+ * Custom React hook to access current theme state and theme toggle function.
+ */
 export function useTheme() {
   const context = useContext(ThemeContext);
   if (!context) {

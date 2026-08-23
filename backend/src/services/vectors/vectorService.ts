@@ -1,9 +1,11 @@
-// import { Prisma } from "@prisma/client";
 import { prisma } from "../../config/db/db";
 import { randomUUID } from "crypto";
 
 //   Create a DocumentChunk with its embedding
 
+/**
+ * Inserts a document chunk and its 768-dimension vector embedding into pgvector using raw SQL.
+ */
 export const createVector = async (
 
   documentId: string,
@@ -36,6 +38,9 @@ export const createVector = async (
 
 //   Get all chunks of a document
 
+/**
+ * Retrieves all vector chunks belonging to a document ordered by chunk index.
+ */
 export const getVectorsByDocumentId = async (
   documentId: string
 ) => {
@@ -52,6 +57,9 @@ export const getVectorsByDocumentId = async (
 
 //   Find similar chunks
 
+/**
+ * Performs cosine distance similarity search (<=>) in pgvector for the top matching document chunks.
+ */
 export const searchSimilarVectors = async (
   embedding: number[],
   userId: string,
@@ -84,6 +92,9 @@ export const searchSimilarVectors = async (
 
 //   Update embedding of a chunk
 
+/**
+ * Updates the vector embedding of an existing document chunk.
+ */
 export const updateVector = async (
   chunkId: string,
   embedding: number[]
@@ -99,6 +110,9 @@ export const updateVector = async (
 
 //   Delete all chunks of a document
 
+/**
+ * Deletes all vector chunks associated with a document ID.
+ */
 export const deleteVectorsByDocumentId = async (
   documentId: string
 ) => {

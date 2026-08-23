@@ -8,6 +8,9 @@ interface SidebarProps {
   documentName?: string;
 }
 
+/**
+ * Renders navigation sidebar with document links, theme switcher, and user account button.
+ */
 export default function Sidebar({ activeItem, onNavigate, documentName }: SidebarProps) {
   const { user } = useUser();
   const { theme, toggleTheme } = useTheme();

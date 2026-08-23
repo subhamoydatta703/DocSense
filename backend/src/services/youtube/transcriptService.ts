@@ -49,6 +49,9 @@ export class YoutubeTranscriptRateLimitedError extends Error {
     }
 }
 
+/**
+ * Fetches YouTube API resources with custom browser headers and timeout handling.
+ */
 async function fetchYouTube(
     params: FetchParams,
     stage: string,
@@ -96,6 +99,9 @@ async function fetchYouTube(
     }
 }
 
+/**
+ * Extracts and logs YouTube player response diagnostic metadata for captions.
+ */
 async function logPlayerResponse(response: Response, videoId: string): Promise<void> {
     try {
         const player = await response.clone().json() as PlayerResponseForLogging;
@@ -127,15 +133,18 @@ async function logPlayerResponse(response: Response, videoId: string): Promise<v
     }
 }
 
-// Extract video ID from any YouTube URL format
+/**
+ * Extracts 11-character video ID from YouTube watch, shorts, or short-link URLs.
+ */
 function extractVideoId(url: string): string {
     const match = url.match(/(?:v=|\/shorts\/|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
     if (!match) throw new Error("Could not extract video ID from URL");
     return match[1]!;
 }
 
-// Identifies errors that mean the video cannot currently provide an accessible
-// caption track. These must never be converted into document content.
+/**
+ * Checks if an error indicates captions are disabled or unavailable for a video.
+ */
 function isNoTranscriptError(err: unknown): boolean {
     const errorName = err instanceof Error ? err.name : undefined;
     return (
@@ -158,6 +167,9 @@ export class YoutubeTranscriptUnavailableError extends Error {
     }
 }
 
+/**
+ * Retrieves YouTube video transcript using Redis caching, Supadata provider, or fallback scraper.
+ */
 export const transcriptYoutubeVideo = async (videoUrl: string) => {
     try {
         console.log("Fetching video transcript...");

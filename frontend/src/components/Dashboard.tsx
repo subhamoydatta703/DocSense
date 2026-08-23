@@ -9,6 +9,9 @@ interface DashboardProps {
   onSelectDocument: (doc: Document) => void;
 }
 
+/**
+ * Renders main user dashboard displaying document grid, search bar, and ingestion modal trigger.
+ */
 export default function Dashboard({ onSelectDocument }: DashboardProps) {
   const [documents, setDocuments] = useState<Document[]>([]);
   const [searchQuery, setSearchQuery] = useState('');

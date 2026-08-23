@@ -1,8 +1,11 @@
-import { prisma, Prisma } from "../../config/db/db";
+import { prisma } from "../../config/db/db";
 import { redisClient } from "../../config/redis/redisCaching";
 import { deleteFile } from "../storage/s3storageService";
 import { deleteVectorsByDocumentId } from "../vectors/vectorService";
 
+/**
+ * Creates or updates a YouTube video source document record in Postgres.
+ */
 export const createFileDBYoutubeUrl = async (
   s3Key: string,
   fileName: string,
@@ -69,6 +72,9 @@ export const createFileDBYoutubeUrl = async (
   return { Document };
 };
 
+/**
+ * Creates a YouTube transcript document record in Postgres.
+ */
 export const createFileDBYoutubeTranscript = async (
   s3Key: string,
   fileName: string,
