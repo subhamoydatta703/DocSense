@@ -1,5 +1,8 @@
 import { PDFParse } from 'pdf-parse';
 
+/**
+ * Parses PDF buffer and extracts text content, enforcing a maximum 100-page limit.
+ */
 export async function extractPDFText(dataBuffer: Buffer): Promise<string> {
   let parser;
   try {
@@ -8,8 +11,6 @@ export async function extractPDFText(dataBuffer: Buffer): Promise<string> {
 
     // Get PDF metadata
     const info = await parser.getInfo();
-
-    console.log("Pages:", info.total);
 
     if (info.total > 100) {
       throw new Error("PDF cannot have more than 100 pages.");

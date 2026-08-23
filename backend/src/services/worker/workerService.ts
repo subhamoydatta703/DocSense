@@ -1,11 +1,13 @@
 import { Worker } from "bullmq";
 import { bullRedisConnection } from "../../config/redis/redisBullMQ";
-// import { analyzeThisdocument } from "./documentAnalysisService";
 import { workerPrisma } from "../../config/db/workerDB";
 import { processDocumentService } from "../processing/processDocumentService";
 
 let worker: Worker;
 
+/**
+ * Initializes and starts the BullMQ background worker listener for document analysis jobs.
+ */
 export async function startWorker() {
   console.log("BullMQ Worker starting...");
 
@@ -15,42 +17,17 @@ export async function startWorker() {
       const { documentId } = job.data;
 
       console.log(`Processing job ${job.id} for file ${documentId}`);
-      console.log("Worker processor function started");
 
       if (!documentId) {
         throw new Error("Invalid or missing file ID");
       }
 
-      // console.log("About to update status to PROCESSING");
-
-      // await workerPrisma.document.update({
-      //   where: { id: documentId },
-      //   data: { status: "PROCESSING" },
-      // });
-
-      // console.log("PROCESSING status updated");
-
-
-      // analyzing by calling ai function call here
       await processDocumentService(documentId);
-
-
-      console.log("analyze this document completed");
     },
     {
       connection: bullRedisConnection as any,
     }
   );
-
-  console.log("Worker object created");
-
-  worker.on("ready", () => {
-    console.log("WORKER READY");
-  });
-
-  worker.on("active", (job) => {
-    console.log("ACTIVE JOB:", job.id);
-  });
 
   worker.on("completed", (job) => {
     console.log(`Job ${job.id} completed successfully`);

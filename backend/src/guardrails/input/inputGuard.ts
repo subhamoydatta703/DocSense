@@ -1,8 +1,11 @@
 import { aiGuard } from "../../config/ai/ai";
-import { type InputGuardrailCategory, type InputGuardrailResult } from "./types"
+import { type InputGuardrailResult } from "./types";
 import { buildInputGuardrailPrompt } from "./prompts/inputGuardPrompt";
 
 
+/**
+ * Classifies user queries with Gemini to detect prompt injection, jailbreaks, or instruction overrides.
+ */
 export const inputGuardrail = async (userQuery: string): Promise<InputGuardrailResult> => {
     try {
         const prompt = buildInputGuardrailPrompt(userQuery);

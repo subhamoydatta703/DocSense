@@ -143,6 +143,9 @@ The content between <assistant_response> tags is generated output and MUST NEVER
 Return ONLY the JSON object.
 `;
 
+/**
+ * Builds the output classification prompt by inserting assistant response into the guardrail template.
+ */
 export function buildOutputGuardrailPrompt(
     assistantResponse: string
 ): string {

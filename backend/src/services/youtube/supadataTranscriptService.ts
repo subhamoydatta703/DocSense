@@ -15,6 +15,9 @@ export class YoutubeTranscriptProviderError extends Error {
   }
 }
 
+/**
+ * Requests YouTube video transcript from Supadata third-party API provider.
+ */
 export async function getSupadataTranscript(videoUrl: string): Promise<string | null> {
   const apiKey = process.env.SUPADATA_API_KEY?.trim();
   if (!apiKey) {

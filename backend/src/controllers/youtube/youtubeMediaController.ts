@@ -6,6 +6,9 @@ import { createFileDBYoutubeTranscript } from "../../services/youtube/uploadYouT
 import { transcribeUploadedMedia } from "../../services/youtube/mediaTranscriptionService";
 import { CreateWebUrlSchema } from "../../utils/urlSecurity";
 
+/**
+ * Validates magic byte header signatures for uploaded audio and video files.
+ */
 function hasSupportedMediaSignature(buffer: Buffer): boolean {
   if (buffer.length < 12) return false;
   const signature = buffer.subarray(0, 12);
@@ -22,6 +25,9 @@ function hasSupportedMediaSignature(buffer: Buffer): boolean {
   return isWav || isFlac || isOgg || isWebm || isMp4Family || isMp3 || isAac;
 }
 
+/**
+ * Transcribes uploaded audio/video files via Gemini API and enqueues the transcript for vector indexing.
+ */
 export const uploadYoutubeMedia = async (
   req: AuthenticatedRequest,
   res: Response,

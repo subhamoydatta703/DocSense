@@ -5,7 +5,9 @@ import type { AuthenticatedRequest } from "../../middlewares/authMiddleware";
 import { DocumentQueue } from "../../queue/documentQueue";
 import { prisma } from "../../config/db/db";
 
-// upload document
+/**
+ * Handles PDF document upload, stores the file in S3, creates DB record, and enqueues processing job.
+ */
 export const uploadDocument = async (req: AuthenticatedRequest, res: Response) => {
   try {
     if (!req.file) {
@@ -28,25 +30,12 @@ export const uploadDocument = async (req: AuthenticatedRequest, res: Response) =
 
     console.info("Document record created", { documentId: fileData.Document.id });
 
-    // add job to queue
-
-    const job = await DocumentQueue.add(
+    await DocumentQueue.add(
       "document-analysis",
       {
         documentId: fileData.Document.id,
       },
-
     );
-    console.log(
-      "Added job",
-      job.id,
-      job.name
-    );
-
-    console.log("Job added successfully:", fileData.Document.id);
-
-    const counts = await DocumentQueue.getJobCounts();
-    console.log("QUEUE COUNTS:", counts);
 
 
 
@@ -65,7 +54,9 @@ export const uploadDocument = async (req: AuthenticatedRequest, res: Response) =
 };
 
 
-// get document by id
+/**
+ * Fetches a single document record by ID for the authenticated user.
+ */
 export const getDocumentById = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const userId = req.userId!;
@@ -94,7 +85,9 @@ export const getDocumentById = async (req: AuthenticatedRequest, res: Response) 
 };
 
 
-// get all documents
+/**
+ * Fetches all document records belonging to the authenticated user.
+ */
 export const getDocuments = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const userId = req.userId!;
@@ -119,7 +112,9 @@ export const getDocuments = async (req: AuthenticatedRequest, res: Response) => 
 };
 
 
-// delete document
+/**
+ * Deletes a document, removing its S3 file, vector chunks, cache, and database record.
+ */
 export const deleteDocument = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const userId = req.userId!;

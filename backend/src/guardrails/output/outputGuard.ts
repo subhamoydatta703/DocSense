@@ -1,8 +1,11 @@
 import { aiGuard } from "../../config/ai/ai";
 import { buildOutputGuardrailPrompt } from "./prompts/outputGuardPrompt";
-import {type OutputGuardrailResult, type OutputGuardrailCategory} from "./types"
+import { type OutputGuardrailResult } from "./types";
 
 
+/**
+ * Classifies generated AI responses with Gemini to detect prompt leakage, chain of thought, or PII.
+ */
 export const outputGuardrail = async (assistantResponse: string): Promise<OutputGuardrailResult> => {
     try {
         const prompt = buildOutputGuardrailPrompt(assistantResponse);

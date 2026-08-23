@@ -20,6 +20,9 @@ redisClient.on("error", (err) => {
   console.error("[Cache Redis Error]:", err.message);
 });
 
+/**
+ * Connects the main Redis client for rate-limiting and caching and performs a startup health check.
+ */
 export async function connectRedis() {
   console.log("Redis is connecting... ", );
   

@@ -2,6 +2,9 @@ import type { Response, NextFunction } from "express";
 import type { AuthenticatedRequest } from "./authMiddleware";
 import { redisClient } from "../../src/config/redis/redisCaching";
 
+/**
+ * Enforces fixed-window Redis rate limits (max 20 requests per 60 seconds per user/IP).
+ */
 export const rateLimiter = async (req:AuthenticatedRequest, res: Response, next: NextFunction) => {
     
     const key = `rate_limit:${req.method}:${req.path}:${req.userId || req.ip}`;

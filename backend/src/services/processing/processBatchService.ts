@@ -3,6 +3,9 @@ import { createVector } from "../vectors/vectorService";
 
 
 
+/**
+ * Processes a batch of text chunks concurrently by generating embeddings and inserting vectors into pgvector.
+ */
 export const processBatch = async (batch: any[], documentId: string) => {
     try {
         await Promise.all(

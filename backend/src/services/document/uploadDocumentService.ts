@@ -1,9 +1,12 @@
-import { prisma, Prisma } from "../../config/db/db";
+import { prisma } from "../../config/db/db";
 import { redisClient } from "../../config/redis/redisCaching";
 import { CreateDocumentSchema } from "../../utils/validation";
 import { deleteFile } from "../storage/s3storageService";
 import { deleteVectorsByDocumentId } from "../vectors/vectorService";
 
+/**
+ * Creates or updates a PDF document record in Postgres, cleaning up old S3 files and vector chunks on duplicates.
+ */
 export const createFileDB = async (
   s3Key: string,
   originalName: string,
@@ -67,6 +70,9 @@ export const createFileDB = async (
   return { Document };
 };
 
+/**
+ * Updates document metadata for the authorized document owner.
+ */
 export const updateDocumentService = async (DocumentID: string, userId: string, data: any) => {
   const Document = await prisma.document.findUnique({
     where: { id: DocumentID },
@@ -87,6 +93,9 @@ export const updateDocumentService = async (DocumentID: string, userId: string, 
   });
 };
 
+/**
+ * Removes S3 file, deletes pgvector chunks, invalidates cache, and deletes document record.
+ */
 export const deleteDocumentService = async (DocumentID: string, userId: string) => {
   const Document = await prisma.document.findUnique({
     where: { id: DocumentID },
@@ -123,6 +132,9 @@ export const deleteDocumentService = async (DocumentID: string, userId: string) 
   });
 };
 
+/**
+ * Retrieves the S3 key path for a given document ID.
+ */
 export const getS3KeyFromDB = async (documentId: string) => {
   try {
     const file = await prisma.document.findUnique({

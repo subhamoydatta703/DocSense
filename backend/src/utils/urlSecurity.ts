@@ -15,6 +15,9 @@ export const CreateWebUrlSchema = z.object({
 
 type PublicAddress = { address: string; family: 4 | 6 };
 
+/**
+ * Checks if an IP address is a public unicast IP address.
+ */
 function isPublicAddress(address: string): boolean {
   try {
     return ipaddr.parse(address).range() === "unicast";
@@ -23,6 +26,9 @@ function isPublicAddress(address: string): boolean {
   }
 }
 
+/**
+ * Resolves domain hostname to public IP address to prevent SSRF vulnerabilities.
+ */
 async function resolvePublicAddress(hostname: string): Promise<PublicAddress> {
   if (ipaddr.isValid(hostname)) {
     if (!isPublicAddress(hostname)) {
@@ -39,6 +45,9 @@ async function resolvePublicAddress(hostname: string): Promise<PublicAddress> {
   return { address: publicAddress.address, family: publicAddress.family as 4 | 6 };
 }
 
+/**
+ * Validates that a string is a public HTTPS URL with no embedded credentials or private IPs.
+ */
 export async function assertPublicHttpsUrl(value: string): Promise<URL> {
   const url = new URL(value);
   if (url.protocol !== "https:") {
@@ -51,6 +60,9 @@ export async function assertPublicHttpsUrl(value: string): Promise<URL> {
   return url;
 }
 
+/**
+ * Executes a secure HTTPS GET request to fetch HTML content within size and timeout limits.
+ */
 async function requestPublicHtml(url: URL): Promise<{ statusCode: number; location?: string; body: string }> {
   const resolved = await resolvePublicAddress(url.hostname);
 
@@ -114,6 +126,9 @@ async function requestPublicHtml(url: URL): Promise<{ statusCode: number; locati
   });
 }
 
+/**
+ * Fetches public HTML content following up to 3 redirects while enforcing SSRF checks.
+ */
 export async function fetchPublicHtml(initialUrl: string): Promise<{ html: string; finalUrl: URL }> {
   let url = await assertPublicHttpsUrl(initialUrl);
 

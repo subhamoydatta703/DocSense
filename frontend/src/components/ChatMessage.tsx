@@ -15,10 +15,15 @@ interface ChatMessageProps {
   onCitationClick?: (citation: string) => void;
 }
 
+/**
+ * Renders an individual chat message bubble with Markdown formatting and clickable citation tags.
+ */
 export default function ChatMessage({ msg, documentName, onCitationClick }: ChatMessageProps) {
   const isUser = msg.sender === 'user';
 
-  // Filter out any occurrences of (Chunk X) or [Chunk X] or Chunk X and cleanup punctuation residues
+  /**
+   * Strips raw chunk references and cleans up source citation formatting from assistant messages.
+   */
   const cleanText = (text: string) => {
     return text
       // Strip bold/italic chunk references

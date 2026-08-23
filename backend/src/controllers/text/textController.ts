@@ -10,6 +10,9 @@ const TextIngestionSchema = z.object({
   text: z.string().trim().min(20, "Text must be at least 20 characters long").max(500000, "Text exceeds the 500,000 character limit"),
 });
 
+/**
+ * Validates and ingests raw pasted text, uploads it as a UTF-8 text file to S3, and enqueues vector indexing.
+ */
 export const uploadRawText = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const validated = TextIngestionSchema.parse(req.body);

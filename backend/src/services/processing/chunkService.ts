@@ -1,7 +1,9 @@
 import { RecursiveCharacterTextSplitter } from "@langchain/textsplitters";
 import { getParsedData } from "./getDataService";
 
-// get string from getDataService -> creates chunks of that string
+/**
+ * Fetches parsed document text and splits it into semantic chunks using LangChain text splitter.
+ */
 export const createChunks = async (documentID: string): Promise<string[]> => {
     try {
         const splitter = new RecursiveCharacterTextSplitter({

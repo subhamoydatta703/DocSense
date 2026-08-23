@@ -3,6 +3,9 @@ import { ai } from "../../config/ai/ai";
 
 const TRANSCRIPTION_MODEL = process.env.GEMINI_TRANSCRIPTION_MODEL || "gemini-3.6-flash";
 
+/**
+ * Uploads media file to Gemini Files API and requests speech-to-text transcript generation.
+ */
 export async function transcribeUploadedMedia(
   buffer: Buffer,
   mimeType: string,

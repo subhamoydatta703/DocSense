@@ -6,6 +6,9 @@ interface RetrievedChunk {
     distance: number;
 }
 
+/**
+ * Generates a grounded, cited answer using Gemini based strictly on retrieved context chunks.
+ */
 export const answerQuery = async (userQuestion: string, chunks: RetrievedChunk[]) => {
     try {
         const context = chunks

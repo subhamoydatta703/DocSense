@@ -1,5 +1,8 @@
 import { aiQueryOptimization } from "../../config/ai/ai";
 
+/**
+ * Rewrites user queries using Step-Back Prompting to improve semantic retrieval quality.
+ */
 export const optimizeQuery = async(originalQuery: string): Promise<string>=>{
 
     const prompt = `

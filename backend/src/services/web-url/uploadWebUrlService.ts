@@ -1,8 +1,11 @@
-import { prisma, Prisma } from "../../config/db/db";
+import { prisma } from "../../config/db/db";
 import { redisClient } from "../../config/redis/redisCaching";
 import { deleteFile } from "../storage/s3storageService";
 import { deleteVectorsByDocumentId } from "../vectors/vectorService";
 
+/**
+ * Creates or updates a web source document record in Postgres, overriding duplicates.
+ */
 export const createFileDBWebUrl = async (
   s3Key: string,
   originalName: string,
