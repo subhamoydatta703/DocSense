@@ -11,7 +11,7 @@ export const inputGuardrail = async (userQuery: string): Promise<InputGuardrailR
         const prompt = buildInputGuardrailPrompt(userQuery);
 
         const response = await aiGuard.models.generateContent({
-            model: "gemini-3.5-flash-lite",
+            model: "gemini-3.6-flash",
             contents: prompt,
         })
 

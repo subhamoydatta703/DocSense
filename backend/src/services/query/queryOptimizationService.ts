@@ -39,7 +39,7 @@ ${originalQuery}
 `;
 
     const response = await aiQueryOptimization.models.generateContent({
-        model: "gemini-3.5-flash-lite",
+        model: "gemini-3.6-flash",
         contents: prompt,
     });
 
