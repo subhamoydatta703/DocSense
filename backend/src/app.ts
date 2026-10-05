@@ -1,13 +1,14 @@
 import express from "express";
 import cors from "cors";
 import helmet from "helmet";
-import { prisma } from "./config/db/db";
 import { clerkMiddleware } from "@clerk/express";
 import uploadRoutes from "./routes/document/multerRoutes";
 import queryRoutes from "./routes/query/queryRoutes";
 import weburlRoutes from "./routes/web-url/weburlRoutes";
 import youtubeRoutes from "./routes/youtube/youtubeRoutes";
 import textRoutes from "./routes/text/textRoutes";
+import healthRoutes from "./routes/healthRoutes";
+import type { ErrorRequestHandler } from "express";
 
 const app = express();
 
@@ -29,17 +30,21 @@ app.use(
       }
     },
     credentials: true,
+    exposedHeaders: ["Retry-After"],
   })
 );
 app.use(helmet());
 app.use(
   express.json({
+    limit: "4mb",
     verify: (req: any, res, buf) => {
       req.rawBody = buf;
     },
   })
 );
 
+// Public probes must not depend on Clerk availability or authentication.
+app.use(healthRoutes);
 app.use(clerkMiddleware());
 
 // API Routes
@@ -49,25 +54,13 @@ app.use("/api", weburlRoutes);
 app.use("/api", youtubeRoutes);
 app.use("/api", textRoutes);
 
-// Health Check Route
-app.get("/health", async (req, res) => {
-  let dbStatus = "unknown";
-  try {
-    await prisma.$queryRaw`SELECT 1`;
-    dbStatus = "connected";
-  } catch (error: any) {
-    console.error("Health check database query failed:", error instanceof Error ? error.name : "UnknownError");
-    dbStatus = "disconnected";
-  }
-
-  const isHealthy = dbStatus === "connected";
-
-  res.status(isHealthy ? 200 : 500).json({
-    status: isHealthy ? "ok" : "error",
-    timestamp: new Date().toISOString(),
-    uptime: process.uptime(),
-    database: dbStatus,
-  });
-});
+const errorHandler: ErrorRequestHandler = (error, _req, res, _next) => {
+  if (res.headersSent) return _next(error);
+  if (error.type === "entity.too.large") return void res.status(413).json({ success: false, message: "Request body exceeds the 4 MB limit." });
+  if (error.type === "entity.parse.failed") return void res.status(400).json({ success: false, message: "Request body must be valid JSON." });
+  console.error("Unhandled request error", { errorType: error instanceof Error ? error.name : "UnknownError" });
+  res.status(500).json({ success: false, message: "The server could not complete this request. Please try again." });
+};
+app.use(errorHandler);
 
 export default app;

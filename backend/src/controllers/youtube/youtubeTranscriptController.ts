@@ -1,7 +1,8 @@
+import { randomUUID } from "node:crypto";
 import type { Response } from "express";
 import type { AuthenticatedRequest } from "../../middlewares/authMiddleware";
 import { uploadFile } from "../../services/storage/s3storageService";
-import { DocumentQueue } from "../../queue/documentQueue";
+import { enqueueDocument } from "../../queue/documentQueue";
 import { createFileDBYoutubeTranscript } from "../../services/youtube/uploadYouTubeService";
 import { CreateWebUrlSchema } from "../../utils/urlSecurity";
 
@@ -71,7 +72,7 @@ export const uploadYoutubeTranscript = async (
       .replace(/[^a-zA-Z0-9._-]/g, "_")
       .replace(/\.txt$/i, "") || "youtube-transcript";
     const originalName = `${safeBaseName}.txt`;
-    const s3Key = `youtube-transcripts/${userId}/${Date.now()}-${safeBaseName}.txt`;
+    const s3Key = `youtube-transcripts/${userId}/${randomUUID()}-${safeBaseName}.txt`;
 
     const uploadedKey = await uploadFile(
       Buffer.from(transcript, "utf8"),
@@ -85,18 +86,16 @@ export const uploadYoutubeTranscript = async (
       userId,
     );
 
-    const job = await DocumentQueue.add("document-analysis", {
-      documentId: fileData.Document.id,
-    });
+    const job = await enqueueDocument(fileData.Document);
 
     console.info("Queued uploaded YouTube transcript", {
       documentId: fileData.Document.id,
-      jobId: job.id,
+      jobId: job?.id,
     });
 
     return res.status(200).json({
       success: true,
-      message: "Transcript uploaded and processing started successfully.",
+      message: "Transcript saved. Processing will start when the queue is available.",
       fileData,
     });
   } catch (error) {

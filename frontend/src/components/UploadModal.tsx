@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { X, Upload, FileText, Loader2, AlertTriangle, Globe, Link, Video, AlignLeft } from 'lucide-react';
-import { api } from '../api/apiClient';
+import { api, getApiErrorMessage } from '../api/apiClient';
 import type { Document } from '../App';
 
 interface UploadModalProps {
@@ -53,7 +53,7 @@ function UploadModal({ onClose, onSuccess }: UploadModalProps) {
     setActiveTab(tab);
   };
 
-  // ─── PDF handlers ───
+  // â”€â”€â”€ PDF handlers â”€â”€â”€
   const handleDrag = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -125,29 +125,14 @@ function UploadModal({ onClose, onSuccess }: UploadModalProps) {
       } else {
         setError(response.data.message || "Failed to upload document.");
       }
-    } catch (err: any) {
-      const errorMsg = err.response?.data?.message || err.message;
-      if (err.code === "ERR_NETWORK" || err.response?.status === 404 || err.response?.status === 500) {
-        const mockDoc: Document = {
-          id: crypto.randomUUID(),
-          originalName: file.name,
-          s3Key: `mock/${Date.now()}-${file.name}`,
-          status: 'PENDING',
-          createdAt: new Date().toISOString(),
-          sourceType: 'PDF',
-        };
-        setTimeout(() => {
-          onSuccess(mockDoc);
-          onClose();
-        }, 1500);
-      } else {
-        setError(errorMsg || "Upload request encountered an error.");
-        setIsUploading(false);
-      }
+    } catch (err: unknown) {
+      setError(getApiErrorMessage(err, "Upload request encountered an error."));
+    } finally {
+      setIsUploading(false);
     }
   };
 
-  // ─── URL & YouTube helpers ───
+  // â”€â”€â”€ URL & YouTube helpers â”€â”€â”€
   const isValidUrl = (str: string): boolean => {
     try {
       const url = new URL(str);
@@ -204,11 +189,8 @@ function UploadModal({ onClose, onSuccess }: UploadModalProps) {
         setError(response.data.message || "Failed to process Web URL.");
         setIsUploading(false);
       }
-    } catch (err: any) {
-      const backendErrors = err.response?.data?.errors;
-      const errorMsg = backendErrors && backendErrors.length > 0
-        ? backendErrors.map((e: any) => e.message).join(', ')
-        : err.response?.data?.message || err.message;
+    } catch (err: unknown) {
+      const errorMsg = getApiErrorMessage(err, "Unable to add this source. Please try again.");
       setError(errorMsg || "Failed to fetch content from URL.");
       setIsUploading(false);
     }
@@ -273,8 +255,8 @@ function UploadModal({ onClose, onSuccess }: UploadModalProps) {
         setError(response.data?.message || 'Failed to upload transcript.');
         setIsUploading(false);
       }
-    } catch (err: any) {
-      setError(err.response?.data?.message || err.message || 'Failed to upload transcript.');
+    } catch (err: unknown) {
+      setError(getApiErrorMessage(err, 'Failed to upload transcript.'));
       setIsUploading(false);
     }
   };
@@ -307,6 +289,7 @@ function UploadModal({ onClose, onSuccess }: UploadModalProps) {
 
     try {
       const response = await api.post('/youtube/media-upload', formData, {
+        timeout: 180_000,
         headers: { 'Content-Type': 'multipart/form-data' },
       });
       if (response.data?.success) {
@@ -325,8 +308,8 @@ function UploadModal({ onClose, onSuccess }: UploadModalProps) {
         setError(response.data?.message || 'Failed to transcribe media.');
         setIsUploading(false);
       }
-    } catch (err: any) {
-      setError(err.response?.data?.message || err.message || 'Failed to transcribe media.');
+    } catch (err: unknown) {
+      setError(getApiErrorMessage(err, 'Failed to transcribe media.'));
       setIsUploading(false);
     }
   };
@@ -354,17 +337,14 @@ function UploadModal({ onClose, onSuccess }: UploadModalProps) {
         setError(response.data.message || "Failed to process YouTube transcript.");
         setIsUploading(false);
       }
-    } catch (err: any) {
-      const backendErrors = err.response?.data?.errors;
-      const errorMsg = backendErrors && backendErrors.length > 0
-        ? backendErrors.map((e: any) => e.message).join(', ')
-        : err.response?.data?.message || err.message;
+    } catch (err: unknown) {
+      const errorMsg = getApiErrorMessage(err, "Unable to add this source. Please try again.");
       setError(errorMsg || "Failed to fetch YouTube transcript.");
       setIsUploading(false);
     }
   };
 
-  // ─── Text Handlers ───
+  // â”€â”€â”€ Text Handlers â”€â”€â”€
   const handleTextSubmit = async () => {
     const trimmedTitle = textTitle.trim();
     const trimmedText = textContent.trim();
@@ -410,11 +390,8 @@ function UploadModal({ onClose, onSuccess }: UploadModalProps) {
         setError(response.data.message || "Failed to process pasted text.");
         setIsUploading(false);
       }
-    } catch (err: any) {
-      const backendErrors = err.response?.data?.errors;
-      const errorMsg = backendErrors && backendErrors.length > 0
-        ? backendErrors.map((e: any) => e.message).join(', ')
-        : err.response?.data?.message || err.message;
+    } catch (err: unknown) {
+      const errorMsg = getApiErrorMessage(err, "Unable to add this source. Please try again.");
       setError(errorMsg || "Failed to submit text content.");
       setIsUploading(false);
     }
@@ -427,7 +404,7 @@ function UploadModal({ onClose, onSuccess }: UploadModalProps) {
         {/* Header */}
         <div className="flex items-center justify-between border-b border-stone-200 dark:border-gray-800 px-6 py-4">
           <h2 className="text-lg font-semibold text-[#1A1815] dark:text-white">Add Source</h2>
-          <button onClick={onClose} className="text-stone-500 hover:text-[#1A1815] dark:text-brand-muted dark:hover:text-white transition-colors">
+          <button onClick={onClose} disabled={isUploading} className="text-stone-500 hover:text-[#1A1815] dark:text-brand-muted dark:hover:text-white transition-colors disabled:opacity-50">
             <X className="h-5 w-5" />
           </button>
         </div>
@@ -482,7 +459,7 @@ function UploadModal({ onClose, onSuccess }: UploadModalProps) {
             </button>
           </div>
 
-          {/* ─── PDF Tab Content ─── */}
+          {/* â”€â”€â”€ PDF Tab Content â”€â”€â”€ */}
           {activeTab === 'pdf' && (
             <div
               onDragEnter={handleDrag}
@@ -524,7 +501,7 @@ function UploadModal({ onClose, onSuccess }: UploadModalProps) {
             </div>
           )}
 
-          {/* ─── URL Tab Content ─── */}
+          {/* â”€â”€â”€ URL Tab Content â”€â”€â”€ */}
           {activeTab === 'url' && (
             <div className="flex flex-col gap-3">
               <div className="relative">
@@ -544,7 +521,7 @@ function UploadModal({ onClose, onSuccess }: UploadModalProps) {
             </div>
           )}
 
-          {/* ─── YouTube Tab Content ─── */}
+          {/* â”€â”€â”€ YouTube Tab Content â”€â”€â”€ */}
           {activeTab === 'youtube' && (
             <div className="flex flex-col gap-3">
               <div className="relative">
@@ -604,7 +581,7 @@ function UploadModal({ onClose, onSuccess }: UploadModalProps) {
             </div>
           )}
 
-          {/* ─── Text Tab Content ─── */}
+          {/* â”€â”€â”€ Text Tab Content â”€â”€â”€ */}
           {activeTab === 'text' && (
             <div className="flex flex-col gap-3">
               <div>

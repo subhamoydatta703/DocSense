@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ArrowLeft, Send, FileText, CheckCircle, HelpCircle } from 'lucide-react';
-import { api } from '../api/apiClient';
+import { api, getApiErrorMessage } from '../api/apiClient';
 import type { Document } from '../App';
 import Sidebar from './Sidebar';
 import ChatMessage from './ChatMessage';
@@ -64,6 +64,7 @@ export default function QAWorkspace({ document, onBack }: QAWorkspaceProps) {
 
       if (response.data && response.data.success) {
         const answerText = response.data.answer;
+        if (typeof answerText !== 'string' || !answerText.trim()) throw new Error('The server returned an empty answer. Please try again.');
         const citations = parseCitations(answerText);
 
         setMessages((prev) => [
@@ -76,12 +77,9 @@ export default function QAWorkspace({ document, onBack }: QAWorkspaceProps) {
             citations: citations.length > 0 ? citations : undefined,
           },
         ]);
-      }
-    } catch (err: any) {
-      const backendMessage = err?.response?.data?.message;
-      const errorMessage = backendMessage
-        ? backendMessage
-        : "The AI server is busy right now. Please try again in a few moments.";
+      } else { throw new Error(response.data?.message || 'The question could not be processed.'); }
+    } catch (err: unknown) {
+      const errorMessage = getApiErrorMessage(err, 'The question could not be processed. Please try again.');
       setMessages((prev) => [
         ...prev,
         {

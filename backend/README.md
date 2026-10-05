@@ -1,5 +1,7 @@
 # DocSense Backend
 
+See [DEPLOYMENT.md](./DEPLOYMENT.md) for migration, worker deployment, readiness checks, and reliability tests.
+
 The backend engine for DocSense is built on **Bun** and **Express**. It handles document management, orchestrates the ingestion pipeline (PDF, web URLs, YouTube sources, and raw pasted text), performs database vector operations, and interfaces with LLM endpoints.
 
 ---

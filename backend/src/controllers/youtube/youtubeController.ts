@@ -1,7 +1,8 @@
+import { randomUUID } from "node:crypto";
 import type { Response } from "express";
 import type { AuthenticatedRequest } from "../../middlewares/authMiddleware";
 import { uploadFile } from '../../services/storage/s3storageService';
-import { DocumentQueue } from '../../queue/documentQueue';
+import { enqueueDocument } from '../../queue/documentQueue';
 import { createFileDBYoutubeUrl } from "../../services/youtube/uploadYouTubeService";
 import {
     transcriptYoutubeVideo,
@@ -49,7 +50,7 @@ export const youtubeContent = async (req: AuthenticatedRequest, res: Response) =
         const safeFileName =  `${videoId}.txt`;
         const safeOriginalName = `${title}.txt`
 
-        const s3Key = `youtube-sources/${Date.now()}-${safeName}.txt`;
+        const s3Key = `youtube-sources/${randomUUID()}-${safeName}.txt`;
     
 
         // Upload to S3
@@ -60,18 +61,13 @@ export const youtubeContent = async (req: AuthenticatedRequest, res: Response) =
 
         console.info("YouTube source record created", { documentId: fileData.Document.id });
 
-        await DocumentQueue.add(
-            "document-analysis",
-            {
-                documentId: fileData.Document.id,
-            },
-        );
+        await enqueueDocument(fileData.Document);
 
 
 
         return res.status(200).json({
             success: true,
-            message: "Document uploaded and processing started successfully",
+            message: "Document saved. Processing will start when the queue is available.",
             fileData,
         });
 
@@ -104,7 +100,7 @@ export const youtubeContent = async (req: AuthenticatedRequest, res: Response) =
                     ? 503
                     : error.status === 429
                         ? 429
-                        : 422;
+                        : error.status >= 500 ? error.status : 422;
             return res.status(status).json({
                 success: false,
                 message: error.message,

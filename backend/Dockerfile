@@ -40,7 +40,7 @@ USER bun
 
 # Include a health check using Bun's native fetch API
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
-  CMD bun -e "fetch('http://localhost:5000/health').then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))"
+  CMD bun -e "fetch('http://localhost:' + (process.env.PORT || '5000') + '/health').then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))"
 
 # Run migrations automatically, then start the server
-CMD ["sh", "-c", "bunx prisma migrate deploy && bun run src/server.ts"]
+CMD ["sh", "-c", "bunx prisma migrate deploy && exec bun run src/server.ts"]

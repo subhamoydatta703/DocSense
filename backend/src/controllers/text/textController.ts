@@ -1,7 +1,8 @@
+import { randomUUID } from "node:crypto";
 import type { Response } from "express";
 import type { AuthenticatedRequest } from "../../middlewares/authMiddleware";
 import { uploadFile } from "../../services/storage/s3storageService";
-import { DocumentQueue } from "../../queue/documentQueue";
+import { enqueueDocument } from "../../queue/documentQueue";
 import { createFileDBText } from "../../services/text/uploadTextService";
 import { z } from "zod";
 
@@ -20,7 +21,7 @@ export const uploadRawText = async (req: AuthenticatedRequest, res: Response) =>
 
     const safeTitle = validated.title.replace(/[<>:"/\\|?*\x00-\x1F]/g, "_") || "pasted-text";
     const safeOriginalName = validated.title.endsWith(".txt") ? validated.title : `${validated.title}.txt`;
-    const safeFileName = `${Date.now()}-${safeTitle}.txt`;
+    const safeFileName = `${randomUUID()}-${safeTitle}.txt`;
     const s3Key = `text-sources/${userId}/${safeFileName}`;
 
     const buffer = Buffer.from(validated.text, "utf-8");
@@ -30,18 +31,16 @@ export const uploadRawText = async (req: AuthenticatedRequest, res: Response) =>
 
     console.info("Text source record created", { documentId: fileData.Document.id });
 
-    const job = await DocumentQueue.add("document-analysis", {
-      documentId: fileData.Document.id,
-    });
+    const job = await enqueueDocument(fileData.Document);
 
     console.info("Queued raw text document for analysis", {
       documentId: fileData.Document.id,
-      jobId: job.id,
+      jobId: job?.id,
     });
 
     return res.status(200).json({
       success: true,
-      message: "Text document uploaded and processing started successfully",
+      message: "Text document saved. Processing will start when the queue is available.",
       fileData,
     });
   } catch (error) {

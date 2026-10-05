@@ -1,6 +1,6 @@
 import { UserButton, useUser } from '@clerk/clerk-react';
 import { Database, MessageSquareCode, Sun, Moon } from 'lucide-react';
-import { useTheme } from './ThemeContext';
+import { useTheme } from './useTheme';
 
 interface SidebarProps {
   activeItem: 'dashboard' | 'qa';
