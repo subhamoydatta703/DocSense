@@ -6,7 +6,7 @@ Deployment and reliability verification: [backend/DEPLOYMENT.md](./backend/DEPLO
 
 DocSense ingests documents from four source types — **PDF files**, **web pages (URLs)**, **YouTube videos/transcripts/media**, and **raw pasted text** — chunks and embeds them into a vector store, and exposes a retrieval-augmented Q&A interface so users can query their own knowledge base conversationally, with every answer traceable back to its source.
 
-Every question is checked by an input guardrail, optimized for retrieval (step-back prompting), embedded and run through a `pgvector` similarity search, and answered only from the retrieved chunks. The generated answer is then passed through an output guardrail before being returned to the user.
+Each question is independent and checked by an input guardrail. Focused questions use embeddings and owner-scoped `pgvector` retrieval; optional step-back rewriting is disabled by default. Answers include verbatim source quotes, checked citation references and an output guard. Missing evidence produces an explicit abstention. See [the query pipeline and local run guide](./backend/QUERY_PIPELINE.md) for its limits, settings and verification.
 
 ---
 

@@ -4,7 +4,8 @@ export type OutputGuardrailCategory =
     | "CHAIN_OF_THOUGHT"
     | "SENSITIVE_INFORMATION"
     | "PII"
-    | "HARMFUL_CONTENT";
+    | "HARMFUL_CONTENT"
+    | "UNSUPPORTED_CLAIM";
 
 export interface OutputGuardrailResult {
     safe: boolean;

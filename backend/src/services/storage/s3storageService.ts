@@ -1,5 +1,6 @@
 import { s3Client } from "../../config/aws/s3Client";
-import {Readable} from "stream";
+import { Readable } from "node:stream";
+import { readBoundedStream } from "../../utils/boundedStream";
 import { PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
 
 
@@ -24,37 +25,21 @@ export const uploadFile = async (fileBuffer: Buffer , key: string): Promise<stri
 
 
 /**
- * Converts Node or Web readable stream into a single Node.js Buffer.
- */
-const streamToBuffer = async (stream: any): Promise<Buffer> => {
-  // Handle web ReadableStream (Bun) by converting to Node stream
-  if (typeof stream.on !== "function" && typeof stream.getReader === "function") {
-    stream = Readable.fromWeb(stream);
-  }
-  return new Promise((resolve, reject) => {
-    const chunks: any[] = [];
-    stream.on("data", (chunk: any) => chunks.push(chunk));
-    stream.on("end", () => resolve(Buffer.concat(chunks)));
-    stream.on("error", (error: any) => reject(error));
-  });
-};
-
-/**
  * Downloads a file buffer from AWS S3 storage.
  */
 export const getFile = async (key: string): Promise<Buffer> => {
-
+    const signal = AbortSignal.timeout(30_000);
     try {
         const command = new GetObjectCommand({
             Bucket: process.env.AWS_S3_BUCKET_NAME!,
             Key: key,
         })
 
-        const response = await s3Client.send(command, { abortSignal: AbortSignal.timeout(30_000) });
+        const response = await s3Client.send(command, { abortSignal: signal });
         if (!response.Body) {
             throw new Error("File not found");
         }
-        const data = await streamToBuffer(response.Body);
+        const data = await readBoundedStream(response.Body as Readable | ReadableStream<Uint8Array>, signal, 6 * 1024 * 1024);
         return data;
 
     } catch (error) {

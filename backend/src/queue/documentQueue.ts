@@ -51,7 +51,7 @@ export async function recoverUnqueuedDocuments() {
         if (!existing) { await enqueueDocument(document); continue; }
         const state = await existing.getState();
         if (state === "failed") {
-            await prisma.document.updateMany({ where: { id: document.id, s3Key: document.s3Key, status: { in: ["PENDING", "PROCESSING"] } }, data: { status: "FAILED" } });
+            await prisma.document.updateMany({ where: { id: document.id, s3Key: document.s3Key, status: { in: ["PENDING", "PROCESSING"] } }, data: { status: "FAILED", failureReason: "Processing could not finish after retries. Please upload the source again." } });
         } else if (state === "completed") {
             const current = await prisma.document.findUnique({ where: { id: document.id }, select: { s3Key: true, status: true } });
             if (!current || current.s3Key !== document.s3Key || current.status === "COMPLETED" || current.status === "FAILED") continue;

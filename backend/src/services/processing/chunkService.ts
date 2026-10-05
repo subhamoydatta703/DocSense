@@ -1,4 +1,4 @@
-import { RecursiveCharacterTextSplitter } from "@langchain/textsplitters";
+import { splitSourceText } from "../../utils/sourceText";
 import { getParsedData } from "./getDataService";
 
 /**
@@ -6,12 +6,8 @@ import { getParsedData } from "./getDataService";
  */
 export const createChunks = async (documentID: string, source?: { s3Key: string; sourceType: string }): Promise<string[]> => {
     try {
-        const splitter = new RecursiveCharacterTextSplitter({
-            chunkSize: 1000,
-            chunkOverlap: 200,
-        });
         const textData = await getParsedData(documentID, source)
-        const chunks = await splitter.splitText(textData as string)
+        const chunks = await splitSourceText(textData)
         console.info("Document chunking completed", {
             documentId: documentID,
             characterCount: textData.length,

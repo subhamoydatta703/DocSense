@@ -1,6 +1,7 @@
 import { prisma } from "../../config/db/db";
 import { deleteFile } from "../storage/s3storageService";
 import { saveDocumentSource } from "./saveDocumentSource";
+import { ServiceError } from "../../errors/serviceError";
 
 export const createFileDB = (s3Key: string, originalName: string, userId: string) =>
   saveDocumentSource({ s3Key, originalName, fileName: originalName, userId, sourceType: "PDF" });
@@ -14,11 +15,11 @@ export const updateDocumentService = async (DocumentID: string, userId: string, 
   });
 
   if (!Document) {
-    throw new Error("Document not found");
+    throw new ServiceError(404, "Document not found.");
   }
 
   if (Document.userId !== userId) {
-    throw new Error("Unauthorized: You do not own this Document");
+    throw new ServiceError(404, "Document not found.");
   }
 
   return await prisma.document.update({
@@ -37,11 +38,11 @@ export const deleteDocumentService = async (DocumentID: string, userId: string) 
   });
 
   if (!Document) {
-    throw new Error("Document not found");
+    throw new ServiceError(404, "Document not found.");
   }
 
   if (Document.userId !== userId) {
-    throw new Error("Unauthorized: You do not own this Document");
+    throw new ServiceError(404, "Document not found.");
   }
 
   // Lock the same row as chunk writes, then cascade-delete atomically.
@@ -49,7 +50,7 @@ export const deleteDocumentService = async (DocumentID: string, userId: string) 
     const current = await tx.$queryRaw<Array<{ s3Key: string }>>`
       SELECT "s3Key" FROM "Document" WHERE id = ${DocumentID} AND "userId" = ${userId} FOR UPDATE
     `;
-    if (!current[0]) throw new Error("Document not found");
+    if (!current[0]) throw new ServiceError(404, "Document not found.");
     await tx.document.delete({ where: { id: DocumentID } });
     return current[0];
   });

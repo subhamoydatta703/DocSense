@@ -5,6 +5,7 @@ import { uploadFile } from "../../services/storage/s3storageService";
 import { enqueueDocument } from "../../queue/documentQueue";
 import { createFileDBYoutubeTranscript } from "../../services/youtube/uploadYouTubeService";
 import { CreateWebUrlSchema } from "../../utils/urlSecurity";
+import { splitSourceText, SourceValidationError } from "../../utils/sourceText";
 
 /**
  * Ingests an uploaded plain-text YouTube transcript file, stores to S3, and enqueues vector indexing.
@@ -21,7 +22,9 @@ export const uploadYoutubeTranscript = async (
       });
     }
 
-    const transcript = req.file.buffer.toString("utf8").trim();
+    let transcript: string;
+    try { transcript = new TextDecoder("utf-8", { fatal: true }).decode(req.file.buffer).trim(); }
+    catch { return res.status(400).json({ success: false, message: "The transcript must be a valid UTF-8 text file." }); }
     if (req.file.buffer.includes(0)) {
       return res.status(400).json({
         success: false,
@@ -41,6 +44,8 @@ export const uploadYoutubeTranscript = async (
         message: "The transcript is too short to index.",
       });
     }
+
+    await splitSourceText(transcript);
 
     const sourceUrlValue = typeof req.body?.sourceUrl === "string"
       ? req.body.sourceUrl.trim()
@@ -99,6 +104,7 @@ export const uploadYoutubeTranscript = async (
       fileData,
     });
   } catch (error) {
+    if (error instanceof SourceValidationError) return res.status(422).json({ success: false, message: error.message });
     console.error("YouTube transcript upload error:", error);
     return res.status(400).json({
       success: false,

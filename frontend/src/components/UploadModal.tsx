@@ -83,6 +83,7 @@ function UploadModal({ onClose, onSuccess }: UploadModalProps) {
 
   const validateAndSetFile = (selectedFile: File) => {
     setError(null);
+    setFile(null);
     if (selectedFile.type !== "application/pdf") {
       setError("Only PDF files are supported.");
       return;
@@ -136,7 +137,7 @@ function UploadModal({ onClose, onSuccess }: UploadModalProps) {
   const isValidUrl = (str: string): boolean => {
     try {
       const url = new URL(str);
-      return url.protocol === 'http:' || url.protocol === 'https:';
+      return url.protocol === 'https:' && !url.username && !url.password;
     } catch {
       return false;
     }
@@ -145,7 +146,7 @@ function UploadModal({ onClose, onSuccess }: UploadModalProps) {
   const isYouTubeUrl = (str: string): boolean => {
     try {
       const url = new URL(str);
-      return url.hostname.includes('youtube.com') || url.hostname.includes('youtu.be');
+      return new Set(['youtube.com', 'www.youtube.com', 'm.youtube.com', 'youtu.be', 'www.youtu.be']).has(url.hostname.toLowerCase());
     } catch {
       return false;
     }
@@ -158,7 +159,7 @@ function UploadModal({ onClose, onSuccess }: UploadModalProps) {
       return;
     }
     if (!isValidUrl(trimmed)) {
-      setError("Please enter a valid URL starting with http:// or https://");
+      setError("Please enter a valid public HTTPS URL.");
       return;
     }
 
@@ -197,6 +198,10 @@ function UploadModal({ onClose, onSuccess }: UploadModalProps) {
   };
 
   const handleYoutubeSubmit = async () => {
+    if (youtubeValue.trim() && (!isValidUrl(youtubeValue.trim()) || !isYouTubeUrl(youtubeValue.trim()))) {
+      setError('Please enter a valid HTTPS YouTube URL.');
+      return;
+    }
     if (transcriptFile) {
       return processYoutubeTranscript(transcriptFile);
     }
@@ -217,7 +222,8 @@ function UploadModal({ onClose, onSuccess }: UploadModalProps) {
 
   const validateAndSetTranscriptFile = (selectedFile: File) => {
     setError(null);
-    if (selectedFile.type !== 'text/plain' || !selectedFile.name.toLowerCase().endsWith('.txt')) {
+    setTranscriptFile(null);
+    if (!['text/plain', 'application/octet-stream', ''].includes(selectedFile.type) || !selectedFile.name.toLowerCase().endsWith('.txt')) {
       setError('Upload a plain-text transcript file (.txt).');
       return;
     }
@@ -226,6 +232,7 @@ function UploadModal({ onClose, onSuccess }: UploadModalProps) {
       return;
     }
     setTranscriptFile(selectedFile);
+    setMediaFile(null);
   };
 
   const processYoutubeTranscript = async (selectedFile: File) => {
@@ -263,6 +270,7 @@ function UploadModal({ onClose, onSuccess }: UploadModalProps) {
 
   const validateAndSetMediaFile = (selectedFile: File) => {
     setError(null);
+    setMediaFile(null);
     const allowedTypes = new Set([
       'audio/aac', 'audio/flac', 'audio/mpeg', 'audio/mp3', 'audio/mp4', 'audio/ogg',
       'audio/wav', 'audio/webm', 'video/mp4', 'video/mpeg', 'video/quicktime',
@@ -278,6 +286,7 @@ function UploadModal({ onClose, onSuccess }: UploadModalProps) {
       return;
     }
     setMediaFile(selectedFile);
+    setTranscriptFile(null);
   };
 
   const processYoutubeMedia = async (selectedFile: File) => {
@@ -289,7 +298,7 @@ function UploadModal({ onClose, onSuccess }: UploadModalProps) {
 
     try {
       const response = await api.post('/youtube/media-upload', formData, {
-        timeout: 180_000,
+        timeout: 240_000,
         headers: { 'Content-Type': 'multipart/form-data' },
       });
       if (response.data?.success) {

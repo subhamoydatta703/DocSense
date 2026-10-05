@@ -49,7 +49,7 @@ export default function LandingPage() {
             Intelligent Document Search & Q&A
           </span>
           <h1 className="text-4xl md:text-6xl font-serif text-[#1A1815] dark:text-[#F5F3EE] max-w-3xl leading-tight">
-            No hallucinations.<br className="hidden md:inline" /> Just receipts.
+            Answers with sources.<br className="hidden md:inline" /> Ready to inspect.
           </h1>
           <p className="mt-6 text-sm md:text-base text-stone-500 dark:text-brand-muted max-w-xl font-sans leading-relaxed">
             Upload reports, user guides, or business contracts. Ask questions in plain English and get reliable answers with clickable links back to the source text.

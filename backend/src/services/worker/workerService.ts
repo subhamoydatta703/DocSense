@@ -48,7 +48,10 @@ export async function startWorker() {
       catch (error) {
         if (error instanceof StaleDocumentError) return;
         if (error instanceof UnrecoverableError || job.attemptsMade + 1 >= (job.opts.attempts || 1)) {
-          await prisma.document.updateMany({ where: { id: documentId, s3Key: job.data.s3Key }, data: { status: "FAILED" } });
+          const failureReason = error instanceof UnrecoverableError
+            ? error.message.slice(0, 500)
+            : "Processing could not finish after retries. Please upload the source again.";
+          await prisma.document.updateMany({ where: { id: documentId, s3Key: job.data.s3Key }, data: { status: "FAILED", failureReason } });
         }
         throw error;
       }

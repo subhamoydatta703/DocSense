@@ -1,6 +1,8 @@
 import { createPartFromUri, createUserContent, type File as GeminiFile } from "@google/genai";
 import { setTimeout as sleep } from "node:timers/promises";
 import { ai } from "../../config/ai/ai";
+import { requireResponseText } from "../../utils/aiResponse";
+import { retryAiRequest } from "../../utils/aiRetry";
 
 const TRANSCRIPTION_MODEL = process.env.GEMINI_TRANSCRIPTION_MODEL || "gemini-3.6-flash";
 
@@ -24,6 +26,7 @@ export async function transcribeUploadedMedia(
         displayName,
         mimeType,
         abortSignal: signal,
+        httpOptions: { timeout: 150_000 },
       },
     });
 
@@ -31,26 +34,25 @@ export async function transcribeUploadedMedia(
     while (uploadedFile.state !== "ACTIVE") {
       if (uploadedFile.state === "FAILED") throw new Error("Gemini could not process this media file.");
       await sleep(2_000, undefined, { signal });
-      uploadedFile = await ai.files.get({ name: uploadedFile.name!, config: { abortSignal: signal } });
+      uploadedFile = await retryAiRequest(() => ai.files.get({ name: uploadedFile!.name!, config: { abortSignal: signal } }), signal);
     }
     if (!uploadedFile.uri || !uploadedFile.mimeType) {
       throw new Error("Gemini did not return a usable uploaded media reference.");
     }
+    const mediaUri = uploadedFile.uri;
+    const mediaMimeType = uploadedFile.mimeType;
 
-    const response = await ai.models.generateContent({
+    const response = await retryAiRequest(() => ai.models.generateContent({
       model: TRANSCRIPTION_MODEL,
-      config: { abortSignal: signal },
+      config: { abortSignal: signal, httpOptions: { timeout: 150_000 } },
       contents: createUserContent([
-        createPartFromUri(uploadedFile.uri, uploadedFile.mimeType),
+        createPartFromUri(mediaUri, mediaMimeType),
         "Generate an accurate plain-text transcript of all spoken content in this media. Do not summarize, omit, or invent speech. Return only the transcript text.",
       ]),
-    });
+    }), signal);
 
-    const transcript = response.text?.trim();
-    if (!transcript) {
-      throw new Error("Gemini returned an empty transcript.");
-    }
-    return transcript;
+    signal.throwIfAborted();
+    return requireResponseText(response);
   } finally {
     if (uploadedFile?.name) {
       try {

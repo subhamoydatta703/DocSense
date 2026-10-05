@@ -2,6 +2,16 @@ import { prisma } from "../../config/db/db";
 import { randomUUID } from "crypto";
 import { StaleDocumentError } from "../../errors/staleDocumentError";
 
+export interface RetrievedChunk {
+  id: string;
+  documentId: string;
+  chunkIndex: number;
+  sourceKey: string;
+  content: string;
+  documentName: string;
+  distance: number;
+}
+
 //   Create a DocumentChunk with its embedding
 
 /**
@@ -77,8 +87,8 @@ export const searchSimilarVectors = async (
 ) => {
   const vectorStr = `[${embedding.join(",")}]`;
   if (documentId) {
-    return await prisma.$queryRaw`
-      SELECT dc.id, dc."documentId", dc.content, dc."chunkIndex", d."originalName" AS "documentName",
+    return await prisma.$queryRaw<RetrievedChunk[]>`
+      SELECT dc.id, dc."documentId", dc.content, dc."chunkIndex", d."originalName" AS "documentName", d."s3Key" AS "sourceKey",
              dc.embedding <=> ${vectorStr}::vector AS distance
       FROM "DocumentChunk" dc
       JOIN "Document" d ON dc."documentId" = d.id
@@ -87,8 +97,8 @@ export const searchSimilarVectors = async (
       LIMIT ${limit};
     `;
   }
-  return await prisma.$queryRaw`
-    SELECT dc.id, dc."documentId", dc.content, dc."chunkIndex", d."originalName" AS "documentName",
+  return await prisma.$queryRaw<RetrievedChunk[]>`
+    SELECT dc.id, dc."documentId", dc.content, dc."chunkIndex", d."originalName" AS "documentName", d."s3Key" AS "sourceKey",
            dc.embedding <=> ${vectorStr}::vector AS distance
     FROM "DocumentChunk" dc
     JOIN "Document" d ON dc."documentId" = d.id
@@ -100,6 +110,15 @@ export const searchSimilarVectors = async (
 
 
 //   Update embedding of a chunk
+
+/** Complete ordered context for a short-document summary, always owner scoped. */
+export const getSummaryChunks = (userId: string, documentId: string) => prisma.$queryRaw<RetrievedChunk[]>`
+  SELECT dc.id, dc."documentId", dc.content, dc."chunkIndex", d."originalName" AS "documentName",
+         d."s3Key" AS "sourceKey", 0::double precision AS distance
+  FROM "DocumentChunk" dc JOIN "Document" d ON dc."documentId" = d.id
+  WHERE d."userId" = ${userId} AND d.id = ${documentId} AND d.status = 'COMPLETED'
+  ORDER BY dc."chunkIndex" LIMIT 31;
+`;
 
 /**
  * Updates the vector embedding of an existing document chunk.

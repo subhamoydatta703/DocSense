@@ -15,7 +15,8 @@ export const redisClient = createClient({
     socket: {
       tls: true,
       connectTimeout: 10_000,
-      rejectUnauthorized: false, // Often required for Upstash Valkey depending on the root CA
+      rejectUnauthorized: true,
+      servername: new URL(cacheUrlString).hostname,
     },
   }),
 });

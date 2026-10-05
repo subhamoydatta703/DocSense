@@ -135,6 +135,6 @@ Return ONLY the JSON object.
 export function buildInputGuardrailPrompt(userInput: string): string {
     return INPUT_GUARDRAIL_SYSTEM_PROMPT.replace(
         "{{USER_INPUT}}",
-        userInput
+        () => userInput
     );
 }

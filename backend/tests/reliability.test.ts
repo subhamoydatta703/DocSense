@@ -3,6 +3,7 @@ import { UnrecoverableError } from "bullmq";
 
 // No test connects to the application's configured database, Redis, S3, or AI accounts.
 process.env.EMBEDDING_MIN_INTERVAL_MS = "0";
+process.env.QUERY_REWRITE_ENABLED = "true";
 process.env.SUPADATA_API_KEY = "test-only";
 const realFetch = globalThis.fetch;
 let source: { id: string; s3Key: string; sourceType: string; status: string; userId: string } | null;
@@ -36,7 +37,17 @@ const deleteFile = mock(async (_key: string) => undefined);
 mock.module("../src/services/storage/s3storageService", () => ({ deleteFile, uploadFile: async (_buffer: Buffer, key: string) => key, getFile: async () => Buffer.from("readable document text") }));
 mock.module("../src/services/processing/chunkService", () => ({ createChunks: async () => chunks }));
 
-const generateContent = mock(async (_args: unknown) => ({ text: "A valid answer." }));
+const chunkMetadata = { documentId: "document", chunkIndex: 0, sourceKey: "new-upload" };
+const generatedClaim = (chunkId: string, quote: string, text = quote) => JSON.stringify({
+  abstained: false, claims: [{ text, evidence: [{ chunkId, quote }] }],
+});
+const defaultGeneration = async (args: unknown) => {
+  const request = args as { contents: string; config?: { responseJsonSchema?: unknown } };
+  if (!request.config?.responseJsonSchema) return { text: "A valid answer." };
+  const source = JSON.parse(request.contents).sources[0] as { chunkId: string; text: string };
+  return { text: generatedClaim(source.chunkId, source.text) };
+};
+const generateContent = mock(defaultGeneration);
 const guardContent = mock(async (_args: unknown) => ({ text: '{"safe":true,"category":"SAFE","reason":"Allowed"}' }));
 const optimizeContent = mock(async (_args: unknown) => ({ text: "optimized question" }));
 const embedContent = mock(async (_args: unknown) => ({ embeddings: [{ values: Array(768).fill(0.1) }] }));
@@ -69,7 +80,9 @@ mock.module("bullmq", () => ({ Queue: FakeQueue, Worker: FakeWorker, Unrecoverab
 const queueRedis = { status: "ready", ping: async () => "PONG", set: async () => "OK", get: async () => "ready" };
 mock.module("../src/config/redis/redisBullMQ", () => ({ queueRedisConnection: queueRedis, bullRedisConnection: queueRedis }));
 const evalLimit = mock(async (..._args: unknown[]) => [1, 60]);
-mock.module("../src/config/redis/redisCaching", () => ({ redisClient: { isReady: true, ping: async () => "PONG", eval: evalLimit } }));
+const getCache = mock(async (_key: string): Promise<string | null> => null);
+const setCache = mock(async (_key: string, _ttl: number, _content: string) => "OK");
+mock.module("../src/config/redis/redisCaching", () => ({ redisClient: { isReady: true, ping: async () => "PONG", eval: evalLimit, get: getCache, setEx: setCache } }));
 
 const { createVector, searchSimilarVectors } = await import("../src/services/vectors/vectorService");
 const { processDocumentService } = await import("../src/services/processing/processDocumentService");
@@ -78,7 +91,9 @@ const { enqueueDocument, recoverUnqueuedDocuments, documentJobId } = await impor
 const { startWorker, stopWorker } = await import("../src/services/worker/workerService");
 const { getSupadataTranscript } = await import("../src/services/youtube/supadataTranscriptService");
 const { transcribeUploadedMedia } = await import("../src/services/youtube/mediaTranscriptionService");
+const { transcriptYoutubeVideo } = await import("../src/services/youtube/transcriptService");
 const { inputGuardrail } = await import("../src/guardrails/input/inputGuard");
+const { outputGuardrail } = await import("../src/guardrails/output/outputGuard");
 const { parseGuardrailResponse, inputCategories } = await import("../src/guardrails/guardrailSchema");
 const { createEmbeddings } = await import("../src/services/processing/embeddingService");
 const { userQueryService } = await import("../src/services/query/queryService");
@@ -87,11 +102,20 @@ const { rateLimiter } = await import("../src/middlewares/rateLimiterMiddleware")
 beforeEach(() => {
   source = { id: "document", s3Key: "new-upload", sourceType: "PDF", status: "COMPLETED", userId: "user" };
   chunks = ["first chunk", "second chunk"];
-  for (const fn of [rawQuery, rawExecute, updateMany, transaction, deleteFile, generateContent, guardContent, optimizeContent, embedContent, upload, getFile, deleteMedia, queueAdd, getJob, tx.$queryRaw, tx.documentChunk.deleteMany, tx.document.update, prisma.document.findMany]) fn.mockClear();
+  for (const fn of [rawQuery, rawExecute, updateMany, transaction, deleteFile, generateContent, guardContent, optimizeContent, embedContent, upload, getFile, deleteMedia, queueAdd, getJob, tx.$queryRaw, tx.documentChunk.deleteMany, tx.document.update, prisma.document.findMany]) fn.mockReset();
+  transaction.mockImplementation(async operation => operation(tx));
+  rawExecute.mockImplementation(async () => 1);
+  deleteFile.mockImplementation(async () => undefined);
+  deleteMedia.mockImplementation(async () => undefined);
+  tx.$queryRaw.mockImplementation(async () => source ? [{ id: source.id, s3Key: source.s3Key }] : []);
+  tx.documentChunk.deleteMany.mockImplementation(async () => ({ count: 1 }));
+  tx.document.update.mockImplementation(async ({ data }) => ({ ...source, ...data }));
+  prisma.document.findFirst.mockReset().mockImplementation(async () => source);
+  prisma.document.findUnique.mockReset().mockImplementation(async () => source);
   prisma.document.findMany.mockImplementation(async () => source ? [source] : []);
   rawQuery.mockImplementation(async () => []);
   updateMany.mockImplementation(async () => ({ count: 1 }));
-  generateContent.mockImplementation(async () => ({ text: "A valid answer." }));
+  generateContent.mockImplementation(defaultGeneration);
   guardContent.mockImplementation(async () => ({ text: '{"safe":true,"category":"SAFE","reason":"Allowed"}' }));
   optimizeContent.mockImplementation(async () => ({ text: "optimized question" }));
   embedContent.mockImplementation(async () => ({ embeddings: [{ values: Array(768).fill(0.1) }] }));
@@ -100,6 +124,8 @@ beforeEach(() => {
   queueAdd.mockImplementation(async () => ({ id: "queued-job" }));
   getJob.mockImplementation(async () => null);
   evalLimit.mockImplementation(async () => [1, 60]);
+  getCache.mockReset().mockImplementation(async () => null);
+  setCache.mockReset().mockImplementation(async () => "OK");
   queueRedis.status = "ready";
 });
 afterEach(() => { globalThis.fetch = realFetch; });
@@ -248,9 +274,36 @@ test("guardrails reject malformed, incorrectly typed, and contradictory classifi
     expect(() => parseGuardrailResponse(text, inputCategories)).toThrow();
   }
 });
-test("guardrails request JSON with a schema and an abort signal", async () => {
-  await inputGuardrail("What does the document say?");
-  expect(guardContent.mock.calls[0]![0]).toMatchObject({ config: { responseMimeType: "application/json", responseJsonSchema: { required: ["safe", "category", "reason"] } } });
+test("input classification accepts a fenced JSON response", async () => {
+  guardContent.mockResolvedValueOnce({ text: '```json\n{"safe":true,"category":"SAFE","reason":"Allowed"}\n```' });
+  expect(await inputGuardrail("What does the document say?")).toMatchObject({ safe: true, category: "SAFE" });
+});
+test("already cancelled questions stop before readiness and never reach Gemini", async () => {
+  await expect(userQueryService("question", "user", "document", AbortSignal.abort())).rejects.toMatchObject({ status: 504, stage: "document_readiness" });
+  expect(guardContent).not.toHaveBeenCalled();
+  expect(prisma.document.findFirst).not.toHaveBeenCalled();
+});
+test("input classifier errors retain their pipeline stage", async () => {
+  guardContent.mockRejectedValueOnce(new DOMException("The operation was aborted.", "AbortError"));
+  await expect(userQueryService("question", "user", "document")).rejects.toMatchObject({ status: 504, stage: "input_guard" });
+  expect(guardContent).toHaveBeenCalledTimes(1);
+});
+test("input classifier outages retain their provider status", async () => {
+  guardContent.mockImplementation(async () => { throw Object.assign(new Error("Overloaded"), { status: 503 }); });
+  await expect(userQueryService("question", "user", "document")).rejects.toMatchObject({ status: 503, stage: "input_guard" });
+  expect(guardContent).toHaveBeenCalledTimes(2);
+});
+test("caller cancellation in the input classifier blocks the rest of the pipeline", async () => {
+  const controller = new AbortController();
+  guardContent.mockImplementationOnce(async () => {
+    controller.abort();
+    return { text: '{"safe":true,"category":"SAFE","reason":"Allowed"}' };
+  });
+  await expect(userQueryService("question", "user", "document", controller.signal)).rejects.toMatchObject({ status: 504, stage: "input_guard" });
+  expect(guardContent).toHaveBeenCalledTimes(1);
+  expect(optimizeContent).not.toHaveBeenCalled();
+  expect(embedContent).not.toHaveBeenCalled();
+  expect(generateContent).not.toHaveBeenCalled();
 });
 test("invalid vector dimensions are rejected before database storage", async () => {
   embedContent.mockResolvedValueOnce({ embeddings: [{ values: [0.1] }] });
@@ -267,9 +320,150 @@ test("questions about unfinished documents stop before any AI calls", async () =
 });
 test("optimization outages fall back to original-question retrieval", async () => {
   optimizeContent.mockRejectedValueOnce(new Error("provider unavailable"));
-  rawQuery.mockResolvedValueOnce([{ id: "chunk", content: "context", documentName: "file", distance: 0.1 }]);
-  expect(await userQueryService("original question", "user", "document")).toBe("A valid answer.");
+  rawQuery.mockResolvedValueOnce([{ ...chunkMetadata, id: "chunk", content: "context", documentName: "file", distance: 0.1 }]);
+  expect(await userQueryService("original question", "user", "document")).toBe("context [Source 1]");
   expect(embedContent.mock.calls[0]![0]).toMatchObject({ contents: "original question" });
+});
+test("answer pipeline uses relevant context and validates the generated answer", async () => {
+  rawQuery.mockResolvedValueOnce([
+    { ...chunkMetadata, id: "relevant", content: "Returns are accepted within 42 days.", documentName: "Policy", distance: 0.1 },
+    { ...chunkMetadata, id: "irrelevant", content: "Unrelated source text", documentName: "Other", distance: 0.8 },
+  ]);
+  generateContent.mockResolvedValueOnce({ text: generatedClaim("relevant", "Returns are accepted within 42 days.", "Returns are accepted within 42 days.") });
+  expect(await userQueryService("How long do I have to return an item?", "user", "document"))
+    .toBe("Returns are accepted within 42 days. [Source 1]");
+  const request = generateContent.mock.calls[0]![0] as { contents: string };
+  expect(request.contents).toContain("Returns are accepted within 42 days.");
+  expect(request.contents).toContain("How long do I have to return an item?");
+  expect(request.contents).not.toContain("Unrelated source text");
+  expect(guardContent).toHaveBeenCalledTimes(2);
+  expect((guardContent.mock.calls[1]![0] as { contents: string }).contents)
+    .toContain("Returns are accepted within 42 days. [Source 1]");
+});
+test("retrieval with no relevant chunks skips generation and output validation", async () => {
+  rawQuery.mockResolvedValueOnce([{ ...chunkMetadata, id: "chunk", content: "unrelated", documentName: "file", distance: 0.9 }]);
+  expect(await userQueryService("question", "user", "document")).toBe("I don't have enough information to answer this question.");
+  expect(generateContent).not.toHaveBeenCalled();
+  expect(guardContent).toHaveBeenCalledTimes(1);
+});
+test("unsafe input stops before retrieval and generation", async () => {
+  guardContent.mockResolvedValueOnce({ text: '{"safe":false,"category":"PROMPT_INJECTION","reason":"Blocked input"}' });
+  await expect(userQueryService("question", "user", "document")).rejects.toMatchObject({ name: "GuardrailError", category: "PROMPT_INJECTION" });
+  expect(optimizeContent).not.toHaveBeenCalled();
+  expect(embedContent).not.toHaveBeenCalled();
+  expect(generateContent).not.toHaveBeenCalled();
+});
+test("temporary answer outage recovers and still runs output validation", async () => {
+  rawQuery.mockResolvedValueOnce([{ ...chunkMetadata, id: "chunk", content: "context", documentName: "file", distance: 0.1 }]);
+  generateContent.mockRejectedValueOnce(Object.assign(new Error("Provider overloaded"), { status: 503 }));
+  expect(await userQueryService("question", "user", "document")).toBe("context [Source 1]");
+  expect(generateContent).toHaveBeenCalledTimes(2);
+  expect(guardContent).toHaveBeenCalledTimes(2);
+});
+test("embedding overloads retry once and preserve status when both attempts fail", async () => {
+  const overloaded = Object.assign(new Error("Overloaded"), { status: 503 });
+  embedContent.mockRejectedValueOnce(overloaded);
+  expect(await createEmbeddings("readable text")).toHaveLength(768);
+  expect(embedContent).toHaveBeenCalledTimes(2);
+  embedContent.mockImplementation(async () => { throw overloaded; });
+  const error = await userQueryService("question", "user", "document").then(() => null, error => error);
+  expect(error).toMatchObject({ status: 503, stage: "embedding" });
+  expect(generateContent).not.toHaveBeenCalled();
+});
+test("a summary of a specific section uses focused retrieval", async () => {
+  rawQuery.mockResolvedValueOnce([{ ...chunkMetadata, id: "chunk", content: "Clause 7 covers termination.", documentName: "Policy", distance: 0.1 }]);
+  expect(await userQueryService("Summarize clause 7", "user", "document")).toContain("Clause 7");
+  expect(embedContent).toHaveBeenCalledTimes(1);
+  expect(String(rawQuery.mock.calls[0]![0])).toContain("ORDER BY distance");
+});
+test("valid transcript cache entries avoid external requests", async () => {
+  const cached = { transcriptContent: "A readable synthetic video transcript.", title: "Video", channel: "Channel", videoId: "abcdefghijk", sourceUrl: "https://www.youtube.com/watch?v=abcdefghijk" };
+  getCache.mockResolvedValueOnce(JSON.stringify(cached));
+  const fetched = mock(async () => { throw new Error("External request should not run"); });
+  globalThis.fetch = fetched as unknown as typeof fetch;
+  expect(await transcriptYoutubeVideo(cached.sourceUrl)).toEqual(cached);
+  expect(fetched).not.toHaveBeenCalled();
+});
+test("invalid transcript cache entries fall through to fresh validated metadata and text", async () => {
+  getCache.mockResolvedValueOnce(JSON.stringify({ videoId: "other-video", transcriptContent: "wrong" }));
+  const fetched = mock(async (url: unknown) => String(url).includes("oembed")
+    ? Response.json({ title: "Fresh video", author_name: "Fresh channel" })
+    : Response.json({ content: "A fresh readable transcript with actual source text." }));
+  globalThis.fetch = fetched as unknown as typeof fetch;
+  const result = await transcriptYoutubeVideo("https://www.youtube.com/watch?v=abcdefghijk");
+  expect(result.title).toBe("Fresh video");
+  expect(result.transcriptContent).toContain("fresh readable transcript");
+  expect(fetched).toHaveBeenCalledTimes(2);
+  expect(setCache).toHaveBeenCalledTimes(1);
+});
+test("empty answers fail without retrying or running output validation", async () => {
+  rawQuery.mockResolvedValueOnce([{ ...chunkMetadata, id: "chunk", content: "context", documentName: "file", distance: 0.1 }]);
+  generateContent.mockResolvedValueOnce({ text: "   " });
+  await expect(userQueryService("question", "user", "document")).rejects.toMatchObject({ status: 502, stage: "answer_generation" });
+  expect(generateContent).toHaveBeenCalledTimes(1);
+  expect(guardContent).toHaveBeenCalledTimes(1);
+});
+test("answer rate limits remain 429 and do not trigger an immediate retry", async () => {
+  rawQuery.mockResolvedValueOnce([{ ...chunkMetadata, id: "chunk", content: "context", documentName: "file", distance: 0.1 }]);
+  generateContent.mockRejectedValueOnce(Object.assign(new Error("Rate limited"), { status: 429 }));
+  await expect(userQueryService("question", "user", "document")).rejects.toMatchObject({ status: 429, stage: "answer_generation" });
+  expect(generateContent).toHaveBeenCalledTimes(1);
+  expect(guardContent).toHaveBeenCalledTimes(1);
+});
+test("cancelled answer generation stops without retrying or returning an answer", async () => {
+  const controller = new AbortController();
+  rawQuery.mockResolvedValueOnce([{ ...chunkMetadata, id: "chunk", content: "context", documentName: "file", distance: 0.1 }]);
+  generateContent.mockImplementationOnce(async args => {
+    const requestSignal = (args as { config: { abortSignal: AbortSignal } }).config.abortSignal;
+    controller.abort(new DOMException("Test deadline reached", "TimeoutError"));
+    requestSignal.throwIfAborted();
+    return { text: "Should never return" };
+  });
+  await expect(userQueryService("question", "user", "document", controller.signal))
+    .rejects.toMatchObject({ status: 504, stage: "answer_generation" });
+  expect(generateContent).toHaveBeenCalledTimes(1);
+  expect(guardContent).toHaveBeenCalledTimes(1);
+});
+test("unsafe generated output is never returned", async () => {
+  rawQuery.mockResolvedValueOnce([{ ...chunkMetadata, id: "chunk", content: "context", documentName: "file", distance: 0.1 }]);
+  guardContent.mockResolvedValueOnce({ text: '{"safe":true,"category":"SAFE","reason":"Allowed"}' });
+  guardContent.mockResolvedValueOnce({ text: '{"safe":false,"category":"SENSITIVE_INFORMATION","reason":"Blocked output"}' });
+  await expect(userQueryService("question", "user", "document")).rejects.toMatchObject({ name: "GuardrailError", category: "SENSITIVE_INFORMATION" });
+});
+test("output classifier failures fail closed", async () => {
+  rawQuery.mockResolvedValueOnce([{ ...chunkMetadata, id: "chunk", content: "context", documentName: "file", distance: 0.1 }]);
+  guardContent.mockResolvedValueOnce({ text: '{"safe":true,"category":"SAFE","reason":"Allowed"}' });
+  guardContent.mockResolvedValueOnce({ text: "invalid JSON" });
+  await expect(userQueryService("question", "user", "document")).rejects.toMatchObject({ status: 502, stage: "output_guard" });
+});
+test("temporary output classifier outages recover and return the generated answer", async () => {
+  rawQuery.mockResolvedValueOnce([{ ...chunkMetadata, id: "chunk", content: "context", documentName: "file", distance: 0.1 }]);
+  guardContent.mockResolvedValueOnce({ text: '{"safe":true,"category":"SAFE","reason":"Allowed"}' });
+  guardContent.mockRejectedValueOnce(Object.assign(new Error("Overloaded"), { status: 503 }));
+  expect(await userQueryService("question", "user", "document")).toBe("context [Source 1]");
+  expect(guardContent).toHaveBeenCalledTimes(3);
+  expect(generateContent).toHaveBeenCalledTimes(1);
+});
+test("recovery from an output classifier outage still blocks unsafe answers", async () => {
+  rawQuery.mockResolvedValueOnce([{ ...chunkMetadata, id: "chunk", content: "context", documentName: "file", distance: 0.1 }]);
+  guardContent.mockResolvedValueOnce({ text: '{"safe":true,"category":"SAFE","reason":"Allowed"}' });
+  guardContent.mockRejectedValueOnce(Object.assign(new Error("Overloaded"), { status: 503 }));
+  guardContent.mockResolvedValueOnce({ text: '{"safe":false,"category":"SENSITIVE_INFORMATION","reason":"Blocked output"}' });
+  await expect(userQueryService("question", "user", "document")).rejects.toMatchObject({ name: "GuardrailError", category: "SENSITIVE_INFORMATION" });
+  expect(guardContent).toHaveBeenCalledTimes(3);
+});
+test("already cancelled output classification never calls Gemini", async () => {
+  await expect(outputGuardrail("answer", AbortSignal.abort())).rejects.toMatchObject({ name: "AbortError" });
+  expect(guardContent).not.toHaveBeenCalled();
+});
+test("cancellation during output retry backoff stops further calls", async () => {
+  const controller = new AbortController();
+  guardContent.mockImplementationOnce(async () => {
+    queueMicrotask(() => controller.abort());
+    throw Object.assign(new Error("Overloaded"), { status: 503 });
+  });
+  await expect(outputGuardrail("answer", controller.signal)).rejects.toMatchObject({ name: "AbortError" });
+  expect(guardContent).toHaveBeenCalledTimes(1);
 });
 test("rate limits expose retry time and fail closed when Redis is unavailable", async () => {
   const response = { set: mock(), status: mock((_status: number) => response), json: mock() };
@@ -300,7 +494,7 @@ beforeAll(async () => {
 afterAll(async () => { httpServer.closeAllConnections(); await new Promise<void>(resolve => httpServer.close(() => resolve())); });
 
 test("large pasted text within the advertised character limit is accepted", async () => {
-  const response = await realFetch(`${baseUrl}/api/text`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title: "Large source", text: "\u0001".repeat(500_000) }) });
+  const response = await realFetch(`${baseUrl}/api/text`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title: "Large source", text: '"a'.repeat(250_000) }) });
   expect(response.status).toBe(200);
   expect(await response.json()).toMatchObject({ success: true });
 });
@@ -341,7 +535,7 @@ test("invalid questions are rejected before guardrails", async () => {
     expect(guardContent).not.toHaveBeenCalled();
 });
 test("persistent answer provider outages return 503 with retry guidance", async () => {
-  rawQuery.mockResolvedValueOnce([{ id: "chunk", content: "context", documentName: "file", distance: 0.1 }]);
+  rawQuery.mockResolvedValueOnce([{ ...chunkMetadata, id: "chunk", content: "context", documentName: "file", distance: 0.1 }]);
   generateContent.mockImplementation(async () => { throw Object.assign(new Error("Provider overloaded"), { status: 503 }); });
   const response = await realFetch(`${baseUrl}/api/query`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ query: "question" }) });
   expect(response.status).toBe(503);
@@ -350,6 +544,18 @@ test("persistent answer provider outages return 503 with retry guidance", async 
   expect(generateContent).toHaveBeenCalledTimes(2);
   expect(guardContent).toHaveBeenCalledTimes(1);
 });
+test("persistent output classifier outages return 503 without releasing the answer", async () => {
+  rawQuery.mockResolvedValueOnce([{ ...chunkMetadata, id: "chunk", content: "context", documentName: "file", distance: 0.1 }]);
+  guardContent.mockResolvedValueOnce({ text: '{"safe":true,"category":"SAFE","reason":"Allowed"}' });
+  guardContent.mockImplementation(async () => { throw Object.assign(new Error("Overloaded"), { status: 503 }); });
+  const response = await realFetch(`${baseUrl}/api/query`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ query: "question" }) });
+  expect(response.status).toBe(503);
+  expect(response.headers.get("Retry-After")).toBe("30");
+  const body = await response.json() as Record<string, unknown>;
+  expect(body).toMatchObject({ success: false, stage: "output_guard" });
+  expect(body.answer).toBeUndefined();
+  expect(guardContent).toHaveBeenCalledTimes(3);
+});
 test("liveness remains available while dependency readiness reports failure", async () => {
   queueRedis.status = "reconnecting";
   const live = await realFetch(`${baseUrl}/live`);
@@ -357,4 +563,96 @@ test("liveness remains available while dependency readiness reports failure", as
   const health = await realFetch(`${baseUrl}/health`);
   expect(health.status).toBe(503);
   expect(await health.json()).toMatchObject({ queue: "disconnected", worker: "unavailable" });
+});
+
+test("production guard functions reject string booleans and contradictory results", async () => {
+  for (const text of ['{"safe":"false","category":"SAFE","reason":"bad"}', '{"safe":false,"category":"SAFE","reason":"bad"}']) {
+    guardContent.mockResolvedValueOnce({ text });
+    await expect(inputGuardrail("question")).rejects.toThrow();
+    guardContent.mockResolvedValueOnce({ text });
+    await expect(outputGuardrail("answer")).rejects.toThrow();
+  }
+});
+test("an input classifier transient outage recovers before continuing", async () => {
+  guardContent.mockRejectedValueOnce(Object.assign(new Error("Overloaded"), { status: 503 }));
+  expect(await userQueryService("question", "user", "document")).toBe("I don't have enough information to answer this question.");
+  expect(guardContent).toHaveBeenCalledTimes(2);
+  expect(embedContent).toHaveBeenCalledTimes(1);
+});
+test("unsupported claims are withheld even when the output is otherwise safe", async () => {
+  rawQuery.mockResolvedValueOnce([{ ...chunkMetadata, id: "chunk", content: "context", documentName: "file", distance: 0.1 }]);
+  guardContent.mockResolvedValueOnce({ text: '{"safe":true,"category":"SAFE","reason":"Allowed"}' });
+  guardContent.mockResolvedValueOnce({ text: '{"safe":false,"category":"UNSUPPORTED_CLAIM","reason":"The quote does not support the claim."}' });
+  expect(await userQueryService("question", "user", "document")).toBe("I don't have enough information to answer this question.");
+});
+test("answer and quote content are withheld when the source changes during generation", async () => {
+  rawQuery.mockResolvedValueOnce([{ ...chunkMetadata, id: "chunk", content: "context", documentName: "file", distance: 0.1 }]);
+  generateContent.mockImplementationOnce(async args => {
+    source!.s3Key = "replacement-upload";
+    return defaultGeneration(args);
+  });
+  await expect(userQueryService("question", "user", "document")).rejects.toMatchObject({ status: 409, stage: "source_validation" });
+});
+test("blocked and truncated answer completions do not reach output classification", async () => {
+  for (const metadata of [{ candidates: [{ finishReason: "MAX_TOKENS" }] }, { promptFeedback: { blockReason: "SAFETY" } }]) {
+    rawQuery.mockResolvedValueOnce([{ ...chunkMetadata, id: "chunk", content: "context", documentName: "file", distance: 0.1 }]);
+    generateContent.mockResolvedValueOnce({ text: generatedClaim("chunk", "context"), ...metadata });
+    const before = guardContent.mock.calls.length;
+    await expect(userQueryService("question", "user", "document")).rejects.toMatchObject({ status: 502, stage: "answer_generation" });
+    expect(guardContent.mock.calls.length - before).toBe(1);
+  }
+});
+test("short-document summaries receive all ordered sections and skip query rewriting and embedding", async () => {
+  rawQuery.mockResolvedValueOnce([
+    { ...chunkMetadata, id: "first", content: "The first section is about returns.", documentName: "file", distance: 0 },
+    { ...chunkMetadata, id: "last", chunkIndex: 1, content: "The last section requires a receipt.", documentName: "file", distance: 0 },
+  ]);
+  await userQueryService("Summarize this document", "user", "document");
+  expect(optimizeContent).not.toHaveBeenCalled();
+  expect(embedContent).not.toHaveBeenCalled();
+  const request = generateContent.mock.calls[0]![0] as { contents: string };
+  expect(JSON.parse(request.contents).sources).toHaveLength(2);
+  expect(String(rawQuery.mock.calls[0]![0])).toContain('ORDER BY dc."chunkIndex"');
+});
+test("oversized full-document summaries report their limit without presenting partial context as complete", async () => {
+  rawQuery.mockResolvedValueOnce(Array.from({ length: 31 }, (_, index) => ({ ...chunkMetadata, id: `chunk-${index}`, content: "context", documentName: "file", distance: 0 })));
+  expect(await userQueryService("Summarize this document", "user", "document")).toContain("too long for a complete summary");
+  expect(generateContent).not.toHaveBeenCalled();
+});
+test("legacy marker-only vectors never become generation context", async () => {
+  rawQuery.mockResolvedValueOnce([{ ...chunkMetadata, id: "chunk", content: "-- 1 of 1 --", documentName: "resume.pdf", distance: 0.1 }]);
+  expect(await userQueryService("question", "user", "document")).toBe("I don't have enough information to answer this question.");
+  expect(generateContent).not.toHaveBeenCalled();
+});
+test("a marker-only processing job fails with an actionable reason without creating embeddings", async () => {
+  chunks = ["-- 1 of 1 --"];
+  await startWorker();
+  await expect(processJob({ data: { documentId: "document", s3Key: "new-upload" }, attemptsMade: 0, opts: { attempts: 3 } })).rejects.toBeInstanceOf(UnrecoverableError);
+  expect(updateMany.mock.calls.at(-1)![0]).toMatchObject({ data: { status: "FAILED", failureReason: expect.stringContaining("OCR") } });
+  expect(embedContent).not.toHaveBeenCalled();
+});
+test("successful query HTTP responses include verified quotes and stable source metadata", async () => {
+  rawQuery.mockResolvedValueOnce([{ ...chunkMetadata, id: "chunk", content: "context", documentName: "file", distance: 0.1 }]);
+  const response = await realFetch(`${baseUrl}/api/query`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ query: "question" }) });
+  expect(response.status).toBe(200);
+  const data = await response.json() as { answer: string; citations: unknown[] };
+  expect(data.answer).toBe("context [Source 1]");
+  expect(data.citations).toHaveLength(1);
+  expect(data.citations[0]).toMatchObject({ chunkId: "chunk", quote: "context", documentId: "document" });
+  expect(JSON.stringify(data)).not.toContain("new-upload");
+});
+test("missing or foreign documents stop before any provider calls", async () => {
+  prisma.document.findFirst.mockResolvedValueOnce(null);
+  await expect(userQueryService("question", "user", "unknown-document")).rejects.toMatchObject({ status: 404 });
+  expect(prisma.document.findFirst.mock.calls[0]![0]).toMatchObject({ where: { id: "unknown-document", userId: "user" } });
+  expect(guardContent).not.toHaveBeenCalled();
+});
+test("unreadable text sources and fake PDF uploads are rejected before source storage", async () => {
+  const text = await realFetch(`${baseUrl}/api/text`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title: "Blank", text: "-- 1 of 1 --\n".repeat(3) }) });
+  expect(text.status).toBe(422);
+  const file = new FormData();
+  file.append("document", new Blob(["plain text, not PDF"], { type: "application/pdf" }), "fake.pdf");
+  const pdf = await realFetch(`${baseUrl}/api/upload`, { method: "POST", body: file });
+  expect(pdf.status).toBe(400);
+  expect(queueAdd).not.toHaveBeenCalled();
 });
