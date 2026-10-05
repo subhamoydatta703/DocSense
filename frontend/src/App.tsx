@@ -5,6 +5,7 @@ import LandingPage from './components/LandingPage';
 import Dashboard from './components/Dashboard';
 import QAWorkspace from './components/QAWorkspace';
 import { ThemeProvider } from './components/ThemeContext';
+import type { SourceType } from './config/sources';
 
 export interface Document {
   id: string;
@@ -13,8 +14,8 @@ export interface Document {
   status: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
   failureReason?: string | null;
   createdAt: string;
-  sourceType?: 'PDF' | 'WEBSITE' | 'YOUTUBE' | 'TEXT';
-  sourceUrl?: string;
+  sourceType?: SourceType;
+  sourceUrl?: string | null;
 }
 
 function SignedInApp() {

@@ -1,5 +1,5 @@
 import { UserButton, useUser } from '@clerk/clerk-react';
-import { Database, MessageSquareCode, Sun, Moon } from 'lucide-react';
+import { Layers, MessageSquare, Sun, Moon } from 'lucide-react';
 import { useTheme } from './useTheme';
 
 interface SidebarProps {
@@ -8,77 +8,41 @@ interface SidebarProps {
   documentName?: string;
 }
 
-/**
- * Renders navigation sidebar with document links, theme switcher, and user account button.
- */
 export default function Sidebar({ activeItem, onNavigate, documentName }: SidebarProps) {
   const { user } = useUser();
   const { theme, toggleTheme } = useTheme();
-
-  return (
-    <aside className="w-60 bg-[#FAF8F3] dark:bg-[#0A0A0B] border-r border-stone-200 dark:border-gray-800 flex flex-col h-full shrink-0">
-      {/* Brand Logo */}
-      <div className="px-6 py-6 border-b border-stone-200 dark:border-gray-800">
-        <div className="flex items-center gap-2">
-          <div className="h-6 w-7 border border-[#C4791F] dark:border-brand-accent flex items-center justify-center text-[#C4791F] dark:text-brand-accent font-serif font-bold text-xs">
-            DS
-          </div>
-          <span className="font-serif font-bold text-lg text-[#1A1815] dark:text-[#F5F3EE] tracking-tight">
-            DocSense
-          </span>
-        </div>
-      </div>
-
-      {/* Navigation */}
-      <nav className="flex-1 px-4 py-6 flex flex-col gap-1">
-        <button
-          onClick={() => onNavigate('dashboard')}
-          className={`flex items-center gap-3 px-3 py-2.5 text-xs font-mono uppercase tracking-wider transition-all duration-200 focus:outline-none ${
-            activeItem === 'dashboard'
-              ? 'text-[#C4791F] dark:text-brand-accent border-l-2 border-[#C4791F] dark:border-brand-accent bg-[#C4791F]/5 dark:bg-brand-accent/5'
-              : 'text-stone-500 dark:text-brand-muted hover:text-[#1A1815] dark:hover:text-brand-text hover:bg-stone-100 dark:hover:bg-white/5 border-l-2 border-transparent'
-          }`}
-        >
-          <Database className="h-4 w-4 shrink-0" />
-          <span>Documents</span>
+  const appearance = <button onClick={toggleTheme} aria-label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
+    className="p-2 rounded-md hover:bg-stone-200 dark:hover:bg-white/10">
+    {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+  </button>;
+  const brand = <span className="font-serif font-bold text-lg">DocSense</span>;
+  return <>
+    <nav aria-label="Mobile navigation" className="md:hidden flex items-center justify-between gap-2 px-4 py-3 border-b border-stone-200 dark:border-gray-800 shrink-0">
+      {brand}
+      <button onClick={() => onNavigate('dashboard')} aria-current={activeItem === 'dashboard' ? 'page' : undefined}
+        className="flex items-center gap-2 text-sm text-[#C4791F] dark:text-brand-accent">
+        <Layers className="h-4 w-4" />Sources
+      </button>
+      <div className="flex items-center gap-2">{appearance}<UserButton afterSignOutUrl="/" /></div>
+    </nav>
+    <aside className="hidden md:flex w-60 border-r border-stone-200 dark:border-gray-800 flex-col h-full shrink-0">
+      <div className="px-6 py-6 border-b border-stone-200 dark:border-gray-800">{brand}</div>
+      <nav aria-label="Workspace navigation" className="flex-1 px-4 py-6 flex flex-col gap-2">
+        <button onClick={() => onNavigate('dashboard')} aria-current={activeItem === 'dashboard' ? 'page' : undefined}
+          className={'flex items-center gap-3 px-3 py-3 rounded text-sm text-left ' + (activeItem === 'dashboard' ? 'bg-[#C4791F]/10 text-[#C4791F] dark:text-brand-accent' : 'hover:bg-stone-100 dark:hover:bg-white/5')}>
+          <Layers className="h-4 w-4 shrink-0" />Sources
         </button>
-
-        {documentName && (
-          <button
-            onClick={() => onNavigate('qa')}
-            className={`flex items-center gap-3 px-3 py-2.5 text-xs font-mono uppercase tracking-wider transition-all duration-200 focus:outline-none ${
-              activeItem === 'qa'
-                ? 'text-[#C4791F] dark:text-brand-accent border-l-2 border-[#C4791F] dark:border-brand-accent bg-[#C4791F]/5 dark:bg-brand-accent/5'
-                : 'text-stone-500 dark:text-brand-muted hover:text-[#1A1815] dark:hover:text-brand-text hover:bg-stone-100 dark:hover:bg-white/5 border-l-2 border-transparent'
-            }`}
-          >
-            <MessageSquareCode className="h-4 w-4 shrink-0" />
-            <span className="truncate max-w-[140px]">{documentName}</span>
-          </button>
-        )}
+        {documentName && <button onClick={() => onNavigate('qa')} aria-current={activeItem === 'qa' ? 'page' : undefined}
+          className="flex items-center gap-3 px-3 py-3 rounded text-sm text-left bg-[#C4791F]/10 text-[#C4791F] dark:text-brand-accent">
+          <MessageSquare className="h-4 w-4 shrink-0" /><span className="truncate" title={documentName}>{documentName}</span>
+        </button>}
       </nav>
-
-      {/* Theme Toggle in Sidebar */}
-      <div className="px-4 py-2 border-t border-stone-200 dark:border-gray-800 flex items-center justify-between">
-        <span className="text-[10px] font-mono text-stone-500 dark:text-brand-muted uppercase tracking-wider">Appearance</span>
-        <button
-          onClick={toggleTheme}
-          className="p-1.5 text-stone-500 hover:text-[#C4791F] dark:text-brand-muted dark:hover:text-brand-accent hover:bg-stone-100 dark:hover:bg-gray-800/50 rounded transition-all duration-150 focus:outline-none"
-          title="Toggle appearance theme"
-        >
-          {theme === 'dark' ? <Sun className="h-3.5 w-3.5" /> : <Moon className="h-3.5 w-3.5" />}
-        </button>
+      <div className="px-4 py-3 border-t border-stone-200 dark:border-gray-800 flex items-center justify-between text-xs">
+        Appearance{appearance}
       </div>
-
-      {/* Account Info / Footer */}
       <div className="p-4 border-t border-stone-200 dark:border-gray-800 flex items-center gap-3">
-        <UserButton afterSignOutUrl="/" />
-        <div className="flex flex-col min-w-0">
-          <span className="text-xs font-medium text-[#1A1815] dark:text-[#F5F3EE] truncate">
-            {user?.fullName || user?.primaryEmailAddress?.emailAddress.split('@')[0]}
-          </span>
-        </div>
+        <UserButton afterSignOutUrl="/" /><span className="text-xs truncate">{user?.fullName || user?.primaryEmailAddress?.emailAddress.split('@')[0]}</span>
       </div>
     </aside>
-  );
+  </>;
 }

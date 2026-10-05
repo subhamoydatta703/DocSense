@@ -38,12 +38,13 @@ export function getApiErrorMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
 }
 
-export function getApiErrorDetails(error: unknown): { stage?: string; retryAfterSeconds?: number } {
+export function getApiErrorDetails(error: unknown): { status?: number; stage?: string; retryAfterSeconds?: number } {
   if (!axios.isAxiosError(error)) return {};
   const stage = error.response?.data?.stage;
   const header = error.response?.headers['retry-after'];
   const seconds = Number(header ?? error.response?.data?.retryAfterSeconds);
   return {
+    status: error.response?.status,
     stage: typeof stage === 'string' ? stage : undefined,
     retryAfterSeconds: Number.isFinite(seconds) && seconds > 0 ? Math.min(Math.ceil(seconds), 3600) : undefined,
   };
