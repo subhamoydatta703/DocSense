@@ -31,3 +31,28 @@ test('the response contract rejects unsupported answers and malformed references
   expect(parseQueryResponse({ success: true, answer: '42 days [Source 1]', citations: [citation], abstained: false }).citations[0]?.quote).toBe(citation.quote);
   expect(parseQueryResponse({ success: true, answer: 'Insufficient information', citations: [], abstained: true }).abstained).toBeTrue();
 });
+
+test('references describe supporting passages without inventing page or section locations', () => {
+  const html = render({ text: 'Supported answer', citations: [{ ...citation, chunkIndex: 47 }] });
+  expect(html).toContain('Supporting passage');
+  expect(html).not.toContain('section 48');
+  expect(html).not.toContain('page 48');
+});
+test('abstention and cancellation have distinct presentation from service failures', () => {
+  const abstention = render({ text: 'Insufficient information', abstained: true });
+  expect(abstention).toContain('Insufficient source evidence');
+  expect(abstention).not.toContain('role="alert"');
+  const cancelled = render({ sender: 'notice', text: 'Question cancelled.' });
+  expect(cancelled).toContain('role="status"');
+  expect(cancelled).not.toContain('role="alert"');
+});
+test('original links are shown only for references belonging to the selected source', () => {
+  const withSource = (sourceId: string, sourceUrl: string) => renderToStaticMarkup(createElement(ChatMessage, {
+    msg: { id: 'answer', sender: 'ai', text: 'Supported answer', timestamp: new Date(0), citations: [citation] },
+    source: { id: sourceId, sourceUrl },
+  }));
+  expect(withSource('document', 'https://example.com/source')).toContain('Open original source');
+  expect(withSource('document', 'https://example.com/source')).toContain('rel="noopener noreferrer"');
+  expect(withSource('another-source', 'https://example.com/source')).not.toContain('Open original source');
+  expect(withSource('document', 'javascript:alert(1)')).not.toContain('Open original source');
+});
