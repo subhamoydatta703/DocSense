@@ -25,13 +25,18 @@ ${context}
 QUESTION:
 ${userQuestion}
 
-Answer clearly and cite which chunk(s) you used (e.g. "According to Chunk 2...").`;
+Answer directly and cite which chunk(s) you used (e.g. "According to Chunk 2...").
+Keep the answer concise, usually within 150 words, unless the question explicitly requests more detail.
+Include the facts needed to answer the question; avoid repeating the question or adding an introduction.`;
 
 
         const response = await ai.models.generateContent({
             model: "gemini-3.6-flash",
             contents: prompt,
-            config: { abortSignal: AbortSignal.any([AbortSignal.timeout(35_000), ...(signal ? [signal] : [])]) },
+            config: {
+                maxOutputTokens: 2048,
+                abortSignal: AbortSignal.any([AbortSignal.timeout(35_000), ...(signal ? [signal] : [])]),
+            },
         });
 
         const answer = response.text?.trim();
