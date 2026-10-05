@@ -14,6 +14,7 @@ export async function runQueryStage<T>(stage: string, operation: () => Promise<T
     const aborted = error instanceof Error && (error.name === "AbortError" || error.name === "TimeoutError");
     console.error("Query stage failed", { stage, durationMs: Date.now() - startedAt, status: status || undefined, errorType: error instanceof Error ? error.name : "UnknownError" });
     if (status === 429) throw new ServiceError(429, "The AI service is at its request limit. Please try again shortly.", stage);
+    if (status === 503) throw new ServiceError(503, "The AI service is temporarily unavailable. Please try again shortly.", stage);
     if (aborted) throw new ServiceError(504, "The AI service took too long to respond. Please try again.", stage);
     throw new ServiceError(502, "The AI service could not complete this request. Please try again shortly.", stage);
   }

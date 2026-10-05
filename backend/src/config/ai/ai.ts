@@ -1,5 +1,7 @@
 import { GoogleGenAI } from "@google/genai";
-const httpOptions = { timeout: 35_000, retryOptions: { attempts: 2 } };
+// The SDK retry path discards HTTP status and response details. Retry explicitly
+// where needed so callers retain ApiError.status and can honor cancellation.
+const httpOptions = { timeout: 35_000 };
 
 export const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY, httpOptions });
 

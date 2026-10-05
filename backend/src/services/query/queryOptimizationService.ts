@@ -41,7 +41,8 @@ ${originalQuery}
     const response = await aiQueryOptimization.models.generateContent({
         model: "gemini-3.6-flash",
         contents: prompt,
-        config: { temperature: 0, abortSignal: AbortSignal.any([AbortSignal.timeout(10_000), ...(signal ? [signal] : [])]) },
+        // Optional enhancement: promptly fall back to the original question.
+        config: { temperature: 0, abortSignal: AbortSignal.any([AbortSignal.timeout(3_000), ...(signal ? [signal] : [])]) },
     });
 
     return response.text?.trim() || originalQuery;

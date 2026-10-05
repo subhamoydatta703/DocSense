@@ -1,4 +1,5 @@
 import { ai } from "../../config/ai/ai";
+import { retryAiRequest } from "../../utils/aiRetry";
 interface RetrievedChunk {
     id: string;
     content: string;
@@ -30,14 +31,16 @@ Keep the answer concise, usually within 150 words, unless the question explicitl
 Include the facts needed to answer the question; avoid repeating the question or adding an introduction.`;
 
 
-        const response = await ai.models.generateContent({
-            model: "gemini-3.6-flash",
+        // Both attempts and backoff share one deadline; retries cannot extend it.
+        const requestSignal = AbortSignal.any([AbortSignal.timeout(35_000), ...(signal ? [signal] : [])]);
+        const response = await retryAiRequest(() => ai.models.generateContent({
+            model: "gemini-3.8-flash",
             contents: prompt,
             config: {
                 maxOutputTokens: 2048,
-                abortSignal: AbortSignal.any([AbortSignal.timeout(35_000), ...(signal ? [signal] : [])]),
+                abortSignal: requestSignal,
             },
-        });
+        }), requestSignal);
 
         const answer = response.text?.trim();
         if (!answer) throw new Error("AI returned an empty answer.");
