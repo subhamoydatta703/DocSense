@@ -30,7 +30,6 @@ export const userQueryService = async (userQuery: string, userId: string, docume
         let optimizedQuery = userQuery;
         try { optimizedQuery = await runQueryStage("query_optimization", () => optimizeQuery(userQuery, signal)); }
         catch (error) { if (signal?.aborted) throw error; console.warn("Using original query after optimization failure"); }
-        console.info("Query optimization completed");
 
 
 

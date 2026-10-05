@@ -40,7 +40,7 @@ export const queryController = async (req: AuthenticatedRequest, res: Response) 
     } catch (error) {
         if (error instanceof z.ZodError) return res.status(400).json({ success: false, message: "Please provide a valid question and document ID.", errors: error.issues });
         if (error instanceof ServiceError) {
-            if (error.status === 429) res.set("Retry-After", "30");
+            if (error.status === 429 || error.status === 503) res.set("Retry-After", "30");
             return res.status(error.status).json({ success: false, message: error.message, stage: error.stage });
         }
          if (error instanceof GuardrailError) {

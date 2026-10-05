@@ -338,7 +338,17 @@ test("single-document lookup uses the route ID rather than an undefined filter",
 test("invalid questions are rejected before guardrails", async () => {
   const response = await realFetch(`${baseUrl}/api/query`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ query: " " }) });
   expect(response.status).toBe(400);
-  expect(guardContent).not.toHaveBeenCalled();
+    expect(guardContent).not.toHaveBeenCalled();
+});
+test("persistent answer provider outages return 503 with retry guidance", async () => {
+  rawQuery.mockResolvedValueOnce([{ id: "chunk", content: "context", documentName: "file", distance: 0.1 }]);
+  generateContent.mockImplementation(async () => { throw Object.assign(new Error("Provider overloaded"), { status: 503 }); });
+  const response = await realFetch(`${baseUrl}/api/query`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ query: "question" }) });
+  expect(response.status).toBe(503);
+  expect(response.headers.get("Retry-After")).toBe("30");
+  expect(await response.json()).toMatchObject({ success: false, stage: "answer_generation", message: "The AI service is temporarily unavailable. Please try again shortly." });
+  expect(generateContent).toHaveBeenCalledTimes(2);
+  expect(guardContent).toHaveBeenCalledTimes(1);
 });
 test("liveness remains available while dependency readiness reports failure", async () => {
   queueRedis.status = "reconnecting";
