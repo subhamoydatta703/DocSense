@@ -2,6 +2,8 @@ import { lookup } from "node:dns/promises";
 import https from "node:https";
 import { z } from "zod";
 import ipaddr from "ipaddr.js";
+import { ServiceError } from "../errors/serviceError";
+import { withDeadline } from "./deadline";
 
 const MAX_REDIRECTS = 3;
 const MAX_WEB_RESPONSE_BYTES = 2 * 1024 * 1024;
@@ -30,17 +32,19 @@ function isPublicAddress(address: string): boolean {
  * Resolves domain hostname to public IP address to prevent SSRF vulnerabilities.
  */
 async function resolvePublicAddress(hostname: string): Promise<PublicAddress> {
+  hostname = hostname.replace(/^\[|\]$/g, "");
   if (ipaddr.isValid(hostname)) {
     if (!isPublicAddress(hostname)) {
-      throw new Error("The provided URL resolves to a non-public address.");
+      throw new ServiceError(400, "The provided URL resolves to a non-public address.");
     }
     return { address: hostname, family: ipaddr.parse(hostname).kind() === "ipv6" ? 6 : 4 };
   }
 
-  const addresses = await lookup(hostname, { all: true, verbatim: true });
+  const addresses = await withDeadline(lookup(hostname, { all: true, verbatim: true }), 5_000, "Domain lookup timed out.")
+    .catch(() => { throw new ServiceError(422, "The source domain could not be resolved. Please check the URL."); });
   const publicAddress = addresses.find((entry) => isPublicAddress(entry.address));
   if (!publicAddress) {
-    throw new Error("The provided URL does not resolve to a public address.");
+    throw new ServiceError(400, "The provided URL does not resolve to a public address.");
   }
   return { address: publicAddress.address, family: publicAddress.family as 4 | 6 };
 }
@@ -49,12 +53,14 @@ async function resolvePublicAddress(hostname: string): Promise<PublicAddress> {
  * Validates that a string is a public HTTPS URL with no embedded credentials or private IPs.
  */
 export async function assertPublicHttpsUrl(value: string): Promise<URL> {
-  const url = new URL(value);
+  let url: URL;
+  try { url = new URL(value); }
+  catch { throw new ServiceError(400, "Please provide a valid HTTPS URL."); }
   if (url.protocol !== "https:") {
-    throw new Error("Only HTTPS URLs are allowed.");
+    throw new ServiceError(400, "Only HTTPS URLs are allowed.");
   }
   if (url.username || url.password) {
-    throw new Error("URLs with embedded credentials are not allowed.");
+    throw new ServiceError(400, "URLs with embedded credentials are not allowed.");
   }
   await resolvePublicAddress(url.hostname);
   return url;
@@ -73,6 +79,7 @@ async function requestPublicHtml(url: URL): Promise<{ statusCode: number; locati
       port: url.port || 443,
       path: `${url.pathname}${url.search}`,
       method: "GET",
+      signal: AbortSignal.timeout(WEB_REQUEST_TIMEOUT_MS),
       headers: {
         "User-Agent": "DocSense/1.0 (+https://docsense.app)",
         Accept: "text/html,application/xhtml+xml",
@@ -96,7 +103,7 @@ async function requestPublicHtml(url: URL): Promise<{ statusCode: number; locati
       const contentType = response.headers["content-type"] || "";
       if (!contentType.includes("text/html") && !contentType.includes("application/xhtml+xml")) {
         response.resume();
-        reject(new Error("The URL did not return an HTML document."));
+        reject(new ServiceError(422, "The URL did not return an HTML document."));
         return;
       }
 
@@ -105,7 +112,7 @@ async function requestPublicHtml(url: URL): Promise<{ statusCode: number; locati
       response.on("data", (chunk: Buffer) => {
         receivedBytes += chunk.length;
         if (receivedBytes > MAX_WEB_RESPONSE_BYTES) {
-          request.destroy(new Error("The web page exceeds the 2MB content limit."));
+          request.destroy(new ServiceError(422, "The web page exceeds the 2MB content limit."));
           return;
         }
         chunks.push(chunk);

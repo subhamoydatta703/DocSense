@@ -1,4 +1,6 @@
 import { aiQueryOptimization } from "../../config/ai/ai";
+import { aiModels, providerSignal, queryPolicy } from "../../config/ai/policy";
+import { requireResponseText } from "../../utils/aiResponse";
 
 /**
  * Rewrites user queries using Step-Back Prompting to improve semantic retrieval quality.
@@ -39,11 +41,14 @@ ${originalQuery}
 `;
 
     const response = await aiQueryOptimization.models.generateContent({
-        model: "gemini-3.6-flash",
-        contents: prompt,
+        model: aiModels.optimization,
+        contents: JSON.stringify({ question: originalQuery }),
         // Optional enhancement: promptly fall back to the original question.
-        config: { temperature: 0, abortSignal: AbortSignal.any([AbortSignal.timeout(3_000), ...(signal ? [signal] : [])]) },
+        config: { systemInstruction: prompt.slice(0, prompt.indexOf("User Question:")), maxOutputTokens: 256, abortSignal: providerSignal(queryPolicy.rewriteMs, signal), httpOptions: { timeout: queryPolicy.rewriteMs } },
     });
 
-    return response.text?.trim() || originalQuery;
+    signal?.throwIfAborted();
+    const rewritten = requireResponseText(response);
+    if (rewritten.length > 10_000) throw new Error("Query rewrite exceeds the supported length.");
+    return rewritten;
 }

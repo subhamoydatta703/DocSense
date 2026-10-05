@@ -46,6 +46,7 @@ model Document {
   sourceUrl     String?
 
   status        DocumentStatus   @default(PENDING)
+  failureReason String?
 
   userId        String
   user          User             @relation(fields: [userId], references: [id])

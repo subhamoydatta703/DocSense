@@ -5,6 +5,7 @@ import { uploadFile } from "../../services/storage/s3storageService";
 import { enqueueDocument } from "../../queue/documentQueue";
 import { createFileDBText } from "../../services/text/uploadTextService";
 import { z } from "zod";
+import { splitSourceText, SourceValidationError } from "../../utils/sourceText";
 
 const TextIngestionSchema = z.object({
   title: z.string().trim().min(1, "Title is required").max(250, "Title must be 250 characters or less"),
@@ -17,6 +18,7 @@ const TextIngestionSchema = z.object({
 export const uploadRawText = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const validated = TextIngestionSchema.parse(req.body);
+    await splitSourceText(validated.text);
     const userId = req.userId!;
 
     const safeTitle = validated.title.replace(/[<>:"/\\|?*\x00-\x1F]/g, "_") || "pasted-text";
@@ -44,6 +46,7 @@ export const uploadRawText = async (req: AuthenticatedRequest, res: Response) =>
       fileData,
     });
   } catch (error) {
+    if (error instanceof SourceValidationError) return res.status(422).json({ success: false, message: error.message });
     if (error instanceof z.ZodError) {
       return res.status(400).json({
         success: false,

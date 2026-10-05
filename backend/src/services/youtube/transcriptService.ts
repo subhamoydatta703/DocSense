@@ -7,6 +7,19 @@ import {
 import type { FetchParams } from "youtube-transcript-plus";
 import { redisClient } from "../../config/redis/redisCaching";
 import { getSupadataTranscript } from "./supadataTranscriptService";
+import { readBoundedStream } from "../../utils/boundedStream";
+import { withDeadline } from "../../utils/deadline";
+import { ServiceError } from "../../errors/serviceError";
+import { assertReadableSource } from "../../utils/sourceText";
+import { z } from "zod";
+
+const TranscriptCacheSchema = z.object({
+    transcriptContent: z.string().min(20).max(500_000),
+    title: z.string().min(1).max(1000),
+    channel: z.string().min(1).max(1000),
+    videoId: z.string().regex(/^[a-zA-Z0-9_-]{11}$/),
+    sourceUrl: z.string(),
+});
 
 // A real browser User-Agent avoids YouTube serving a consent/cookie-wall
 // page instead of the actual watch page, which is what makes the scraper
@@ -62,6 +75,7 @@ async function fetchYouTube(
     const abortFromCaller = () => controller.abort();
 
     params.signal?.addEventListener("abort", abortFromCaller, { once: true });
+    if (params.signal?.aborted) controller.abort(params.signal.reason);
 
     try {
         const response = await fetch(params.url, {
@@ -88,7 +102,11 @@ async function fetchYouTube(
             throw new YoutubeTranscriptRateLimitedError(retryAfterSeconds);
         }
 
-        return response;
+        // Keep the same deadline through body consumption, not just response headers.
+        const bytes = response.body
+            ? await readBoundedStream(response.body, controller.signal, 6 * 1024 * 1024)
+            : null;
+        return new Response(bytes ? Uint8Array.from(bytes) : null, { status: response.status, statusText: response.statusText, headers: response.headers });
     } catch (error) {
         const errorName = error instanceof Error ? error.name : "UnknownError";
         console.warn(`[YouTube transcript] ${stage}: ${errorName}`);
@@ -138,7 +156,7 @@ async function logPlayerResponse(response: Response, videoId: string): Promise<v
  */
 function extractVideoId(url: string): string {
     const match = url.match(/(?:v=|\/shorts\/|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
-    if (!match) throw new Error("Could not extract video ID from URL");
+    if (!match) throw new ServiceError(400, "Please provide a YouTube watch, shorts, or youtu.be video URL.");
     return match[1]!;
 }
 
@@ -178,10 +196,14 @@ export const transcriptYoutubeVideo = async (videoUrl: string) => {
         const cacheKey = `youtube:transcript:${videoId}`;
 
         try {
-            const cached = await redisClient.get(cacheKey);
+            const cached = await withDeadline(redisClient.get(cacheKey), 3_000, "Transcript cache read timed out.");
             if (cached) {
-                console.info(`[YouTube transcript] cache hit for ${videoId}`);
-                return JSON.parse(cached);
+                const parsed = TranscriptCacheSchema.safeParse(JSON.parse(cached));
+                if (parsed.success && parsed.data.videoId === videoId && parsed.data.sourceUrl === sourceUrl) {
+                    console.info(`[YouTube transcript] cache hit for ${videoId}`);
+                    return parsed.data;
+                }
+                console.warn("Ignoring invalid transcript cache entry", { videoId });
             }
         } catch (error) {
             console.warn(
@@ -200,11 +222,11 @@ export const transcriptYoutubeVideo = async (videoUrl: string) => {
             videoId,
         );
         if (!oembedRes.ok) {
-            throw new Error(`oEmbed request failed with status ${oembedRes.status}`);
+            throw new ServiceError(oembedRes.status >= 500 ? 502 : 422, "YouTube could not return metadata for this video.");
         }
         const oembed = await oembedRes.json();
-        const title = oembed.title || "Unknown Title";
-        const channel = oembed.author_name || "Unknown Channel";
+        const title = typeof oembed.title === "string" && oembed.title.trim() ? oembed.title.slice(0, 1000) : "Unknown Title";
+        const channel = typeof oembed.author_name === "string" && oembed.author_name.trim() ? oembed.author_name.slice(0, 1000) : "Unknown Channel";
 
         // 2. Use the configured transcript provider first. It handles the
         // provider's own caption/ASR fallback without exposing its API key.
@@ -254,13 +276,14 @@ export const transcriptYoutubeVideo = async (videoUrl: string) => {
             characterCount: transcriptContent.length,
         });
 
-        const result = { transcriptContent, title, channel, videoId, sourceUrl };
+        assertReadableSource(transcriptContent);
+        const result = TranscriptCacheSchema.parse({ transcriptContent, title, channel, videoId, sourceUrl });
         try {
-            await redisClient.setEx(
+            await withDeadline(redisClient.setEx(
                 cacheKey,
                 TRANSCRIPT_CACHE_TTL_SECONDS,
                 JSON.stringify(result),
-            );
+            ), 3_000, "Transcript cache write timed out.");
         } catch (error) {
             console.warn(
                 `[YouTube transcript] cache write failed for ${videoId}:`,

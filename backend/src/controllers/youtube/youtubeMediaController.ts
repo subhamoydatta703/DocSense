@@ -1,4 +1,7 @@
 import { randomUUID } from "node:crypto";
+import { splitSourceText, SourceValidationError } from "../../utils/sourceText";
+import { runQueryStage, ServiceError } from "../../errors/serviceError";
+import { z } from "zod";
 import type { Response } from "express";
 import type { AuthenticatedRequest } from "../../middlewares/authMiddleware";
 import { uploadFile } from "../../services/storage/s3storageService";
@@ -73,11 +76,13 @@ export const uploadYoutubeMedia = async (
       .replace(/[^a-zA-Z0-9._-]/g, "_")
       .replace(/\.[^.]+$/, "") || "youtube-media";
 
-    const transcript = await transcribeUploadedMedia(
-      req.file.buffer,
-      req.file.mimetype,
-      req.file.originalname,
-    );
+    const mediaFile = req.file;
+    const transcript = await runQueryStage("media_transcription", () => transcribeUploadedMedia(
+      mediaFile.buffer,
+      mediaFile.mimetype,
+      mediaFile.originalname,
+    ));
+    await splitSourceText(transcript);
     const transcriptName = `${safeBaseName}.txt`;
     const s3Key = `youtube-transcripts/${req.userId}/${randomUUID()}-${safeBaseName}.txt`;
     const uploadedKey = await uploadFile(Buffer.from(transcript, "utf8"), s3Key);
@@ -102,6 +107,12 @@ export const uploadYoutubeMedia = async (
       fileData,
     });
   } catch (error) {
+    if (error instanceof SourceValidationError) return res.status(422).json({ success: false, message: error.message });
+    if (error instanceof z.ZodError) return res.status(400).json({ success: false, message: "Please provide a valid HTTPS YouTube source URL." });
+    if (error instanceof ServiceError) {
+      if (error.status === 429 || error.status === 503) res.set("Retry-After", "30");
+      return res.status(error.status).json({ success: false, message: error.message, stage: error.stage });
+    }
     console.error("YouTube media transcription error:", error);
     return res.status(500).json({
       success: false,

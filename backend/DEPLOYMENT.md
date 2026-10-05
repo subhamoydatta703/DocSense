@@ -17,6 +17,8 @@ The Docker image runs migrations before starting the API and includes the Prisma
 
 Set `DATABASE_URL`, `REDIS_URL`, `BULLMQ_REDIS_URL`, Clerk keys, S3 configuration, and Gemini keys in the host's environment. The API and processing worker use `DATABASE_URL`; the old `WORKER_DATABASE_URL` variable is no longer used for failure status updates. Optional query, guardrail, and embedding keys fall back to `GEMINI_API_KEY` when omitted. Separate keys in the same Google project share quotas.
 
+The query repair also adds `20261006010000_processing_failure_reason`. Apply it before starting the updated API or worker; the dashboard reads this nullable field to explain failed ingestion. Deploy the frontend together with the backend because `/api/query` now supplies validated `citations` and `abstained` alongside the existing `answer` string. No stored embedding format changes are included. Review [QUERY_PIPELINE.md](./QUERY_PIPELINE.md) for the request policy, source-quality cleanup and live checks.
+
 Set `FRONTEND_URL=https://docsense-app.vercel.app` (no trailing slash). Add other exact origins separated by commas only when needed. Set `SUPADATA_API_KEY` to use the transcript provider. `EMBEDDING_MIN_INTERVAL_MS` defaults to 1000; adjust it to the project's actual embedding quota. This pacing is per process, so additional workers increase aggregate usage.
 
 ## Worker options
@@ -48,6 +50,7 @@ Vite embeds these values at build time. Changing a host's runtime environment wi
 
 ```sh
 # frontend
+bun test tests
 npm run lint
 npm run build
 

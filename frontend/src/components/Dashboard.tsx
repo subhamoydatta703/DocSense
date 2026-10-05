@@ -259,6 +259,7 @@ export default function Dashboard({ onSelectDocument }: DashboardProps) {
                         </div>
                       </div>
 
+                      {isFailed && <p role="status" className="mt-3 text-xs text-rose-500">{doc.failureReason || 'Processing failed. Please upload the source again.'}</p>}
                       {isCompleted && (
                         <div className="text-[10px] font-mono text-[#C4791F] dark:text-brand-accent uppercase tracking-wider flex items-center gap-1.5 mt-4">
                           <span>Query document</span>

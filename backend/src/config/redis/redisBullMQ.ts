@@ -24,7 +24,7 @@ function createBullRedisConnection(producer = false): IORedis {
       db: Number(parsedUrl.pathname.slice(1)) || 0,
       connectTimeout: 10_000,
       ...reliability,
-      ...(useTls && { tls: { rejectUnauthorized: false } }), // Upstash often requires rejectUnauthorized: false depending on the certificate chain
+      ...(useTls && { tls: { rejectUnauthorized: true, servername: parsedUrl.hostname } }),
     });
   }
 

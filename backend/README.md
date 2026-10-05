@@ -64,7 +64,7 @@ backend/
 - **Web URL ingestion** — Submit an HTTPS URL. The backend validates public DNS resolution (SSRF protection), fetches with redirect / size / timeout caps, extracts readable text with Cheerio, and indexes it as a `WEBSITE` source.
 - **YouTube ingestion** — Three paths producing a `YOUTUBE` source: video URL transcript (Supadata provider with `youtube-transcript-plus` fallback), `.txt` transcript upload, and audio/video media transcription via the Gemini Files API.
 - **Raw Text ingestion** — Type or paste document text directly. Validated with Zod (title 1–250 chars, content 20–500,000 chars), stored to S3 as a UTF-8 text file, and indexed into `pgvector` as a `TEXT` source.
-- **Query pipeline** — Input guardrail → step-back query optimization → embedding → `pgvector` cosine similarity search (distance threshold) → grounded, cited answer → output guardrail.
+- **Query pipeline** — Owner/readiness check → input guardrail → optional query rewriting → prioritized embedding → owner-scoped retrieval → structured claims and verbatim evidence → output security/support classification → source-version recheck. Short-document summaries use complete ordered context. See [QUERY_PIPELINE.md](./QUERY_PIPELINE.md) for contracts, budgets and limitations.
 - **Rate limiting** — Every API route is protected by a Redis-backed fixed-window counter (max 20 requests / 60s), returning `429` when exceeded.
 
 ---
@@ -81,7 +81,7 @@ bun install
 ### 2. Configure variables
 Create a `.env` file inside the `backend/` directory. The variables mapped in `backend/src/config` are used, including:
 
-- `DATABASE_URL`, `WORKER_DATABASE_URL` — Postgres connection strings (app + worker clients)
+- `DATABASE_URL` — Postgres connection string shared by the API and worker
 - `REDIS_URL`, `BULLMQ_REDIS_URL` — Redis connection strings (cache/rate-limit and BullMQ broker)
 - `CLERK_SECRET_KEY` — server-side authentication (`@clerk/express`)
 - `GEMINI_API_KEY`, `GEMINI_EMBEDDING_API_KEY`, `GEMINI_QUERY_API_KEY`, `GEMINI_GUARD_API_KEY` — AI provider keys
@@ -93,8 +93,11 @@ Create a `.env` file inside the `backend/` directory. The variables mapped in `b
 
 ### 3. Run migrations
 ```bash
-bun run db:migrate
+bunx prisma generate
+bunx prisma migrate deploy
 ```
+
+PostgreSQL must have pgvector available. Apply the checked-in migrations, including `20261006010000_processing_failure_reason`, before starting this version. Use `db:migrate` only when authoring a new migration.
 
 ### 4. Start the server
 To run in development mode with watch mode:

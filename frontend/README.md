@@ -54,7 +54,7 @@ frontend/
 
 ## Local Development (Non-Docker)
 
-Ensure you have **Node.js v20+** and **npm** installed.
+Ensure you have **Node.js v20.19+ or v22.12+** and **npm** installed for Vite 8. Bun v1.3+ runs the response/rendering tests.
 
 ### 1. Install dependencies
 ```bash
@@ -80,3 +80,5 @@ npm run dev
 npm run build
 ```
 The output will be built into the `dist/` directory, or served via the included Docker/Nginx setup.
+
+Run `npm run lint` and `bun test tests` to check the UI and answer contract. Questions are independent; earlier chat messages are not sent as conversation context. Source disclosures show actual backend-validated quotes, while service failures appear as alerts with retry guidance. Cancellation or switching documents abandons the current request.

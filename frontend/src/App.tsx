@@ -11,6 +11,7 @@ export interface Document {
   originalName: string;
   s3Key: string;
   status: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
+  failureReason?: string | null;
   createdAt: string;
   sourceType?: 'PDF' | 'WEBSITE' | 'YOUTUBE' | 'TEXT';
   sourceUrl?: string;
@@ -20,7 +21,7 @@ function SignedInApp() {
   const [selectedDocument, setSelectedDocument] = useState<Document | null>(null);
 
   if (selectedDocument) {
-    return <QAWorkspace document={selectedDocument} onBack={() => setSelectedDocument(null)} />;
+    return <QAWorkspace key={selectedDocument.id} document={selectedDocument} onBack={() => setSelectedDocument(null)} />;
   }
   return <Dashboard onSelectDocument={setSelectedDocument} />;
 }

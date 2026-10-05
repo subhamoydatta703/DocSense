@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { splitSourceText, SourceValidationError } from "../../utils/sourceText";
 import type { Response } from "express";
 import type { AuthenticatedRequest } from "../../middlewares/authMiddleware";
 import { uploadFile } from '../../services/storage/s3storageService';
@@ -12,6 +13,7 @@ import {
 import { YoutubeTranscriptProviderError } from "../../services/youtube/supadataTranscriptService";
 import { CreateWebUrlSchema, assertPublicHttpsUrl } from '../../utils/urlSecurity';
 import z from 'zod';
+import { ServiceError } from '../../errors/serviceError';
 
 
 /**
@@ -39,6 +41,7 @@ export const youtubeContent = async (req: AuthenticatedRequest, res: Response) =
         await assertPublicHttpsUrl(validated.url);
 
         const { transcriptContent, title, channel, videoId, sourceUrl } = await transcriptYoutubeVideo(validated.url);
+        await splitSourceText(transcriptContent);
 
 
         const userId = req.userId!;
@@ -72,6 +75,11 @@ export const youtubeContent = async (req: AuthenticatedRequest, res: Response) =
         });
 
     } catch (error) {
+        if (error instanceof ServiceError) return res.status(error.status).json({ success: false, message: error.message });
+        if (error instanceof Error && (error.name === "AbortError" || error.name === "TimeoutError")) {
+            return res.status(504).json({ success: false, message: "YouTube took too long to respond. Please try again." });
+        }
+        if (error instanceof SourceValidationError) return res.status(422).json({ success: false, message: error.message });
         if (error instanceof z.ZodError) {
             return res.status(400).json({
                 success: false,

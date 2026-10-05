@@ -12,12 +12,20 @@ const deletedObjects: string[] = [];
 let embeddingStarted: (() => void) | undefined;
 let releaseEmbedding: (() => void) | undefined;
 let blockedEmbedding: Promise<void> | undefined;
+let beforeAnswer: (() => Promise<void>) | undefined;
 mock.module("../src/services/storage/s3storageService", () => ({
   getFile: async () => Buffer.from("A readable source for the document processing integration test."),
   deleteFile: async (key: string) => { deletedObjects.push(key); },
 }));
 mock.module("../src/config/ai/ai", () => ({
   aiEmbedding: { models: { embedContent: async () => { embeddingStarted?.(); await blockedEmbedding; return { embeddings: [{ values: Array(768).fill(0.1) }] }; } } },
+  aiGuard: { models: { generateContent: async () => ({ text: JSON.stringify({ safe: true, category: "SAFE", reason: "Allowed" }) }) } },
+  aiQueryOptimization: { models: { generateContent: async () => ({ text: "return policy" }) } },
+  ai: { models: { generateContent: async (request: { contents: string }) => {
+    await beforeAnswer?.();
+    const source = JSON.parse(request.contents).sources[0];
+    return { text: JSON.stringify({ abstained: false, claims: [{ text: source.text, evidence: [{ chunkId: source.chunkId, quote: source.text }] }] }) };
+  } } },
 }));
 
 integration("isolated PostgreSQL and Redis", () => {
@@ -27,6 +35,8 @@ integration("isolated PostgreSQL and Redis", () => {
   let queue: typeof import("../src/queue/documentQueue");
   let redis: typeof import("../src/config/redis/redisBullMQ");
   let worker: typeof import("../src/services/worker/workerService");
+  let queries: typeof import("../src/services/query/queryService");
+  let maintenance: typeof import("../src/services/processing/reindexUnreadableSourcesService");
   const userId = randomUUID();
   const embedding = Array(768).fill(0.1);
 
@@ -45,6 +55,8 @@ integration("isolated PostgreSQL and Redis", () => {
     queue = await import("../src/queue/documentQueue");
     redis = await import("../src/config/redis/redisBullMQ");
     worker = await import("../src/services/worker/workerService");
+    queries = await import("../src/services/query/queryService");
+    maintenance = await import("../src/services/processing/reindexUnreadableSourcesService");
     await redis.verifyBullMQConnection();
     await queue.DocumentQueue.waitUntilReady();
     await prisma.user.create({ data: { id: userId, email: `${userId}@integration.test` } });
@@ -53,6 +65,7 @@ integration("isolated PostgreSQL and Redis", () => {
     releaseEmbedding?.();
     embeddingStarted = undefined;
     blockedEmbedding = undefined;
+    beforeAnswer = undefined;
     deletedObjects.length = 0;
     try { await queue.DocumentQueue.drain(true); }
     finally { await prisma.document.deleteMany({ where: { userId } }); }
@@ -91,6 +104,59 @@ integration("isolated PostgreSQL and Redis", () => {
     expect(results[0]?.distance).toBeCloseTo(0);
     const stored = await vectors.getVectorsByDocumentId(doc.id) as Array<{ embedding: string }>;
     expect(typeof stored[0]?.embedding).toBe("string");
+  });
+  test("the complete query pipeline returns evidence from real owner-scoped vector retrieval", async () => {
+    const doc = await createDocument();
+    await vectors.createVector(doc.id, "Items can be returned within 42 days of purchase.", 0, embedding, doc.s3Key);
+    const result = await queries.userQueryWithEvidence("When can I return an item?", userId, doc.id);
+    expect(result.abstained).toBeFalse();
+    expect(result.answer).toContain("42 days");
+    expect(result.citations[0]).toMatchObject({ documentId: doc.id, chunkIndex: 0, quote: "Items can be returned within 42 days of purchase." });
+    expect(JSON.stringify(result)).not.toContain(doc.s3Key);
+  });
+  test("query readiness and ownership are enforced using real database rows", async () => {
+    const doc = await createDocument("PENDING");
+    const pendingError = await queries.userQueryWithEvidence("question", userId, doc.id).then(() => null, error => error);
+    expect(pendingError).toMatchObject({ status: 409 });
+    const ownershipError = await queries.userQueryWithEvidence("question", randomUUID(), doc.id).then(() => null, error => error);
+    expect(ownershipError).toMatchObject({ status: 404 });
+  });
+  test("source replacement during answer generation prevents publishing stale evidence", async () => {
+    const doc = await createDocument();
+    await vectors.createVector(doc.id, "Items can be returned within 42 days of purchase.", 0, embedding, doc.s3Key);
+    beforeAnswer = async () => { await prisma.document.update({ where: { id: doc.id }, data: { s3Key: randomUUID(), status: "PENDING" } }); };
+    const error = await queries.userQueryWithEvidence("When can I return an item?", userId, doc.id).then(() => null, error => error);
+    expect(error).toMatchObject({ status: 409, stage: "source_validation" });
+  });
+  test("full-document summary retrieval includes ordered chunks beyond the nearest five", async () => {
+    const doc = await createDocument();
+    for (let i = 0; i < 7; i++) await vectors.createVector(doc.id, `Policy section ${i + 1} contains readable text.`, i, embedding, doc.s3Key);
+    const chunks = await vectors.getSummaryChunks(userId, doc.id);
+    expect(chunks.map(chunk => chunk.chunkIndex)).toEqual([0, 1, 2, 3, 4, 5, 6]);
+    expect(await vectors.getSummaryChunks(randomUUID(), doc.id)).toEqual([]);
+    expect((await queries.userQueryWithEvidence("Summarize this document", userId, doc.id)).abstained).toBeFalse();
+  });
+  test("unreadable-source cleanup is read-only by default and preserves readable sources on apply", async () => {
+    const bad = await createDocument();
+    const good = await createDocument();
+    await vectors.createVector(bad.id, "-- 1 of 1 --", 0, embedding, bad.s3Key);
+    await vectors.createVector(good.id, "Readable policy text.", 0, embedding, good.s3Key);
+    expect(await maintenance.reindexUnreadableSources(false, userId)).toEqual({ affected: 1, markedPending: 0 });
+    expect(await prisma.documentChunk.count({ where: { documentId: bad.id } })).toBe(1);
+    expect(await maintenance.reindexUnreadableSources(true, userId)).toEqual({ affected: 1, markedPending: 1 });
+    expect(await prisma.document.findUnique({ where: { id: bad.id }, select: { status: true, s3Key: true } })).toEqual({ status: "PENDING", s3Key: bad.s3Key });
+    expect(await prisma.documentChunk.count({ where: { documentId: bad.id } })).toBe(0);
+    expect(await prisma.document.findUnique({ where: { id: good.id }, select: { status: true, s3Key: true } })).toEqual({ status: "COMPLETED", s3Key: good.s3Key });
+    expect(await prisma.documentChunk.count({ where: { documentId: good.id } })).toBe(1);
+    expect(deletedObjects).toEqual([]);
+  });
+  test("cleanup pagination does not skip sources when earlier rows become pending", async () => {
+    await prisma.document.createMany({ data: Array.from({ length: 101 }, () => ({
+      id: randomUUID(), userId, s3Key: randomUUID(), fileName: "empty.txt", originalName: "empty.txt",
+      sourceType: "TEXT" as const, status: "COMPLETED" as const,
+    })) });
+    expect(await maintenance.reindexUnreadableSources(true, userId)).toEqual({ affected: 101, markedPending: 101 });
+    expect(await prisma.document.count({ where: { userId, status: "PENDING" } })).toBe(101);
   });
   test("replacement row locks reject an old write that was already waiting", async () => {
     const doc = await createDocument();

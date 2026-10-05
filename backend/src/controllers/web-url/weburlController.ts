@@ -9,6 +9,8 @@ import { enqueueDocument } from '../../queue/documentQueue';
 import { createFileDBWebUrl } from '../../services/web-url/uploadWebUrlService';
 import { CreateWebUrlSchema, assertPublicHttpsUrl } from '../../utils/urlSecurity';
 import z from 'zod';
+import { splitSourceText, SourceValidationError } from '../../utils/sourceText';
+import { ServiceError, runQueryStage } from '../../errors/serviceError';
 
 
 /**
@@ -20,7 +22,8 @@ export const webUrlContent = async (req: AuthenticatedRequest, res: Response) =>
 
         await assertPublicHttpsUrl(validated.url);
 
-        const { content, originalName } = await webUrlContentService(validated.url);
+        const { content, originalName } = await runQueryStage("source_fetch", () => webUrlContentService(validated.url));
+        await splitSourceText(content);
 
 
         const userId = req.userId!;
@@ -52,6 +55,8 @@ export const webUrlContent = async (req: AuthenticatedRequest, res: Response) =>
         });
 
     } catch (error) {
+        if (error instanceof ServiceError) return res.status(error.status).json({ success: false, message: error.message, stage: error.stage });
+        if (error instanceof SourceValidationError) return res.status(422).json({ success: false, message: error.message });
         if (error instanceof z.ZodError) {
             return res.status(400).json({
                 success: false,

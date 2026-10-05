@@ -5,6 +5,7 @@ import { uploadFile } from "../../services/storage/s3storageService";
 import type { AuthenticatedRequest } from "../../middlewares/authMiddleware";
 import { enqueueDocument } from "../../queue/documentQueue";
 import { prisma } from "../../config/db/db";
+import { ServiceError } from "../../errors/serviceError";
 
 /**
  * Handles PDF document upload, stores the file in S3, creates DB record, and enqueues processing job.
@@ -16,6 +17,9 @@ export const uploadDocument = async (req: AuthenticatedRequest, res: Response) =
         success: false,
         message: "No file uploaded",
       });
+    }
+    if (!req.file.buffer.subarray(0, 1024).includes(Buffer.from("%PDF-"))) {
+      return res.status(400).json({ success: false, message: "The uploaded file is not a valid PDF." });
     }
     const originalName = req.file.originalname;
     const userId = req.userId!;
@@ -124,6 +128,7 @@ export const deleteDocument = async (req: AuthenticatedRequest, res: Response) =
     });
   } catch (error) {
     console.error("deleteDocument controller error ", error);
+    if (error instanceof ServiceError) return res.status(error.status).json({ success: false, message: error.message });
     return res.status(500).json({
       success: false,
       message: "deleteDocument controller error",

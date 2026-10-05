@@ -1,37 +1,7 @@
-import { aiGuard } from "../../config/ai/ai";
-import { buildOutputGuardrailPrompt } from "./prompts/outputGuardPrompt";
-import { type OutputGuardrailResult } from "./types";
-import { outputCategories, guardrailJsonSchema, parseGuardrailResponse } from "../guardrailSchema";
+import { classifyText } from "../classifyText";
+import { outputCategories } from "../guardrailSchema";
+import { OUTPUT_GUARDRAIL_SYSTEM_PROMPT } from "./prompts/outputGuardPrompt";
+import type { OutputGuardrailResult } from "./types";
 
-
-/**
- * Classifies generated AI responses with Gemini to detect prompt leakage, chain of thought, or PII.
- */
-export const outputGuardrail = async (assistantResponse: string, signal?: AbortSignal): Promise<OutputGuardrailResult> => {
-    try {
-        const prompt = buildOutputGuardrailPrompt(assistantResponse);
-
-        const response = await aiGuard.models.generateContent({
-            model: "gemini-3.6-flash",
-            contents: prompt,
-            config: { responseMimeType: "application/json", responseJsonSchema: guardrailJsonSchema(outputCategories), temperature: 0,
-                abortSignal: AbortSignal.any([AbortSignal.timeout(15_000), ...(signal ? [signal] : [])]) },
-        });
-
-        const responseText = response.text || "";
-        if (!responseText) {
-            throw new Error("Guardrail returned an empty response.");
-        }
-
-        const parsed = parseGuardrailResponse(responseText, outputCategories);
-
-        return {
-            safe: parsed.safe,
-            category: parsed.category,
-            reason: parsed.reason,
-        };
-    } catch (error) {
-        console.error("Error at outputGuardrail: ", error);
-        throw error;
-    }
-};
+export const outputGuardrail = (assistantResponse: string, signal?: AbortSignal): Promise<OutputGuardrailResult> =>
+  classifyText(assistantResponse, OUTPUT_GUARDRAIL_SYSTEM_PROMPT.replace("{{ASSISTANT_RESPONSE}}", "See the JSON user message."), outputCategories, signal);

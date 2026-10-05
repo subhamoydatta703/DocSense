@@ -20,7 +20,7 @@ export async function saveDocumentSource(source: Source, replaceExisting = true)
       `;
       if (!locked[0]) return { document: await tx.document.create({ data: source }), oldKey: null };
       await tx.documentChunk.deleteMany({ where: { documentId: existing.id } });
-      const document = await tx.document.update({ where: { id: existing.id }, data: { ...source, status: "PENDING" } });
+      const document = await tx.document.update({ where: { id: existing.id }, data: { ...source, status: "PENDING", failureReason: null } });
       return { document, oldKey: locked[0].s3Key };
     }, { maxWait: 10_000, timeout: 10_000 });
     if (result.oldKey && result.oldKey !== source.s3Key) {
