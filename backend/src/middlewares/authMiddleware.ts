@@ -36,8 +36,8 @@ export async function authMiddleware(req: AuthenticatedRequest, res: Response, n
           email: email,
         });
 
-        user = await prisma.user.create({
-          data: validatedUser,
+        user = await prisma.user.upsert({
+          where: { id: userId }, create: validatedUser, update: {},
         });
         console.info("Synced new user from Clerk");
       } catch (clerkErr) {
@@ -47,8 +47,8 @@ export async function authMiddleware(req: AuthenticatedRequest, res: Response, n
           id: userId,
           email: `user_${userId}@placeholder.com`,
         });
-        user = await prisma.user.create({
-          data: fallbackUser,
+        user = await prisma.user.upsert({
+          where: { id: userId }, create: fallbackUser, update: {},
         });
       }
     }

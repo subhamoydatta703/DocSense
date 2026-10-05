@@ -9,7 +9,7 @@ interface RetrievedChunk {
 /**
  * Generates a grounded, cited answer using Gemini based strictly on retrieved context chunks.
  */
-export const answerQuery = async (userQuestion: string, chunks: RetrievedChunk[]) => {
+export const answerQuery = async (userQuestion: string, chunks: RetrievedChunk[], signal?: AbortSignal) => {
     try {
         const context = chunks
             .map((c, i) => `[Chunk ${i + 1} - Source: ${c.documentName}]\n${c.content}`)
@@ -31,9 +31,12 @@ Answer clearly and cite which chunk(s) you used (e.g. "According to Chunk 2...")
         const response = await ai.models.generateContent({
             model: "gemini-3.6-flash",
             contents: prompt,
+            config: { abortSignal: AbortSignal.any([AbortSignal.timeout(35_000), ...(signal ? [signal] : [])]) },
         });
 
-        return response.text;
+        const answer = response.text?.trim();
+        if (!answer) throw new Error("AI returned an empty answer.");
+        return answer;
 
     } catch (error) {
         console.error("Error in answer generation service: ", error);

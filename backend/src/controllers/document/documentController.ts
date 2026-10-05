@@ -1,8 +1,9 @@
+import { randomUUID } from "node:crypto";
 import type { Response } from "express";
 import { createFileDB, deleteDocumentService } from "../../services/document/uploadDocumentService";
 import { uploadFile } from "../../services/storage/s3storageService";
 import type { AuthenticatedRequest } from "../../middlewares/authMiddleware";
-import { DocumentQueue } from "../../queue/documentQueue";
+import { enqueueDocument } from "../../queue/documentQueue";
 import { prisma } from "../../config/db/db";
 
 /**
@@ -20,7 +21,7 @@ export const uploadDocument = async (req: AuthenticatedRequest, res: Response) =
     const userId = req.userId!;
 
     // Generate S3 key
-    const s3Key = `documents/${Date.now()}-${originalName}`;
+    const s3Key = `documents/${randomUUID()}-${originalName}`;
 
     // Upload to S3
     const uploadedKey = await uploadFile(req.file.buffer, s3Key);
@@ -30,18 +31,13 @@ export const uploadDocument = async (req: AuthenticatedRequest, res: Response) =
 
     console.info("Document record created", { documentId: fileData.Document.id });
 
-    await DocumentQueue.add(
-      "document-analysis",
-      {
-        documentId: fileData.Document.id,
-      },
-    );
+    await enqueueDocument(fileData.Document);
 
 
 
     return res.status(200).json({
       success: true,
-      message: "Document uploaded and processing started successfully",
+      message: "Document saved. Processing will start when the queue is available.",
       fileData,
     });
   } catch (error) {
@@ -60,7 +56,7 @@ export const uploadDocument = async (req: AuthenticatedRequest, res: Response) =
 export const getDocumentById = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const userId = req.userId!;
-    const documentId = req.params.documentId as string;
+    const documentId = req.params.id as string;
     const document = await prisma.document.findFirst({
       where: { id: documentId, userId: userId },
     });

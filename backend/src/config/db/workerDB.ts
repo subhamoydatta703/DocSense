@@ -8,6 +8,10 @@ if (!connectionString) {
 
 const adapter = new PrismaPg({
   connectionString,
+  connectionTimeoutMillis: 10_000,
+  query_timeout: 15_000,
+  statement_timeout: 15_000,
+  max: 5,
 });
 export const workerPrisma = new PrismaClient({
   adapter,

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Search, Plus, Loader2, FileUp, Trash2, Globe, Video, AlignLeft } from 'lucide-react';
-import { api } from '../api/apiClient';
+import { api, getApiErrorMessage } from '../api/apiClient';
 import type { Document } from '../App';
 import UploadModal from './UploadModal';
 import Sidebar from './Sidebar';
@@ -17,72 +17,44 @@ export default function Dashboard({ onSelectDocument }: DashboardProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-
-  // Load and fetch documents
-  const fetchDocuments = async () => {
-    try {
-      const response = await api.get('/documents');
-      if (response.data && response.data.success) {
-        setDocuments(response.data.documents);
-      }
-    } catch (err: any) {
-      console.warn("GET /documents endpoint not fully implemented. Falling back to local state.");
-      const localDocs = localStorage.getItem('docsense_documents');
-      if (localDocs) {
-        setDocuments(JSON.parse(localDocs));
-      }
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [refreshCount, setRefreshCount] = useState(0);
 
   useEffect(() => {
-    fetchDocuments();
-  }, []);
-
-
-  // Poll status of processing/pending documents
-  useEffect(() => {
-    const activePolling = documents.some(
-      (doc) => doc.status === 'PENDING' || doc.status === 'PROCESSING'
-    );
-
-    if (!activePolling) return;
-
-    const interval = setInterval(async () => {
-      // Simulate status progression for local/mock uploads
-      const updatedDocs = documents.map((doc) => {
-        if (doc.status === 'PENDING') {
-          return { ...doc, status: 'PROCESSING' as const };
-        }
-        if (doc.status === 'PROCESSING') {
-          const isDone = Math.random() > 0.3;
-          return { ...doc, status: isDone ? 'COMPLETED' as const : 'FAILED' as const };
-        }
-        return doc;
-      });
-
-      setDocuments(updatedDocs);
-      localStorage.setItem('docsense_documents', JSON.stringify(updatedDocs));
-
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout>;
+    let failures = 0;
+    // Schedule after each response so slow requests cannot overlap.
+    const poll = async () => {
+      let delay = 60_000;
       try {
-        const response = await api.get('/documents');
-        if (response.data && response.data.success) {
-          setDocuments(response.data.documents);
-        }
+        const response = await api.get('/documents', { signal: controller.signal, timeout: 90_000 });
+        if (!response.data?.success || !Array.isArray(response.data.documents)) throw new Error('Unable to load documents.');
+        if (controller.signal.aborted) return;
+        const currentDocuments: Document[] = response.data.documents;
+        setDocuments(currentDocuments);
+        setLoadError(null);
+        failures = 0;
+        delay = currentDocuments.some(doc => doc.status === 'PENDING' || doc.status === 'PROCESSING') ? 10_000 : 60_000;
       } catch (err) {
-        // Fall back to simulation
+        if (controller.signal.aborted) return;
+        setLoadError(getApiErrorMessage(err, 'Unable to load documents.'));
+        delay = Math.min(60_000, 10_000 * 2 ** Math.min(failures++, 3));
+      } finally {
+        if (!controller.signal.aborted) {
+          setIsLoading(false);
+          timer = setTimeout(poll, delay);
+        }
       }
-    }, 10000);
-
-    return () => clearInterval(interval);
-  }, [documents]);
+    };
+    void poll();
+    return () => { controller.abort(); clearTimeout(timer); };
+  }, [refreshCount]);
 
   const handleUploadSuccess = (newDoc: Document) => {
-    const updated = [newDoc, ...documents];
-    setDocuments(updated);
-    localStorage.setItem('docsense_documents', JSON.stringify(updated));
-    fetchDocuments();
+    setDocuments(current => [newDoc, ...current.filter(doc => doc.id !== newDoc.id)]);
+    setRefreshCount(count => count + 1);
   };
 
   const handleDeleteDocument = async (docId: string, e: React.MouseEvent) => {
@@ -90,15 +62,13 @@ export default function Dashboard({ onSelectDocument }: DashboardProps) {
     if (!confirm("Are you sure you want to delete this document?")) return;
 
     try {
-      await api.delete(`/documents/${docId}`);
-      const updated = documents.filter(doc => doc.id !== docId);
-      setDocuments(updated);
-      localStorage.setItem('docsense_documents', JSON.stringify(updated));
+      setActionError(null);
+      const response = await api.delete(`/documents/${docId}`);
+      if (!response.data?.success) throw new Error('Unable to delete this document.');
+      setDocuments(current => current.filter(doc => doc.id !== docId));
+      setRefreshCount(count => count + 1);
     } catch (err) {
-      console.warn("Failed to delete document from backend. Falling back to local update.");
-      const updated = documents.filter(doc => doc.id !== docId);
-      setDocuments(updated);
-      localStorage.setItem('docsense_documents', JSON.stringify(updated));
+      setActionError(getApiErrorMessage(err, 'Unable to delete this document.'));
     }
   };
 
@@ -142,6 +112,13 @@ export default function Dashboard({ onSelectDocument }: DashboardProps) {
 
         {/* Content Body */}
         <main className="flex-1 max-w-6xl w-full mx-auto px-8 py-8 flex flex-col gap-6">
+          {(loadError || actionError) && (
+            <div role="alert" className="rounded-md border border-rose-500/30 bg-rose-500/10 p-4 text-sm">
+              <p>{actionError || loadError}</p>
+              {loadError && <p className="mt-1">Document statuses may be out of date. We will retry automatically.</p>}
+              <button className="mt-2 underline" onClick={() => { setActionError(null); setRefreshCount(count => count + 1); }}>Refresh documents</button>
+            </div>
+          )}
           <div>
             <h1 className="text-xl font-serif text-[#1A1815] dark:text-brand-text">Your Documents</h1>
             <p className="text-xs text-stone-500 dark:text-brand-muted mt-1">

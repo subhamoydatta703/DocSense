@@ -1,4 +1,5 @@
 import { createClient } from "redis";
+import { withDeadline } from "../../utils/deadline";
 
 // Trim whitespace which often causes DNS/ENOTFOUND errors when copying from Render/Upstash dashboards
 const cacheUrlString = process.env.REDIS_URL?.trim() || 
@@ -8,9 +9,12 @@ const useTls = cacheUrlString.startsWith("rediss:");
 
 export const redisClient = createClient({
   url: cacheUrlString,
+  disableOfflineQueue: true,
+  socket: { connectTimeout: 10_000 },
   ...(useTls && {
     socket: {
       tls: true,
+      connectTimeout: 10_000,
       rejectUnauthorized: false, // Often required for Upstash Valkey depending on the root CA
     },
   }),
@@ -27,10 +31,11 @@ export async function connectRedis() {
   console.log("Redis is connecting... ", );
   
   try {
-    await redisClient.connect();
+    if (!redisClient.isOpen) await withDeadline(redisClient.connect(), 15_000, "Cache connection timed out");
+    if (!redisClient.isReady) throw new Error("Cache connection is not ready");
     
     // Startup health check
-    const pingResponse = await redisClient.ping();
+    const pingResponse = await withDeadline(redisClient.ping(), 5_000, "Cache ping timed out");
     if (pingResponse !== "PONG") {
       throw new Error(`Unexpected ping response: ${pingResponse}`);
     }
@@ -38,6 +43,6 @@ export async function connectRedis() {
     console.log("Cache Redis Connected & Health Check Passed");
   } catch (error: any) {
     console.error("Cache Redis Connection or Health Check Failed:", error.message);
-    process.exit(1); // Fail fast so Render can restart the service
+    throw error;
   }
 }

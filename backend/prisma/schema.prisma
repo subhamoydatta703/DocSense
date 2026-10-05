@@ -70,4 +70,5 @@ model DocumentChunk {
   embedding   Unsupported("vector(768)")
 
   createdAt   DateTime  @default(now())
+  @@unique([documentId, chunkIndex])
 }

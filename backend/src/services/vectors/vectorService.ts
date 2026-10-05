@@ -1,5 +1,6 @@
 import { prisma } from "../../config/db/db";
 import { randomUUID } from "crypto";
+import { StaleDocumentError } from "../../errors/staleDocumentError";
 
 //   Create a DocumentChunk with its embedding
 
@@ -11,13 +12,19 @@ export const createVector = async (
   documentId: string,
   content: string,
   chunkIndex: number,
-  embedding: number[]
+  embedding: number[],
+  expectedS3Key: string
 ) => {
 
   const id = randomUUID();
   const vectorStr = `[${embedding.join(",")}]`;
 
-  await prisma.$executeRaw`
+  await prisma.$transaction(async tx => {
+    const current = await tx.$queryRaw<Array<{ s3Key: string }>>`
+      SELECT "s3Key" FROM "Document" WHERE id = ${documentId} FOR UPDATE
+    `;
+    if (current[0]?.s3Key !== expectedS3Key) throw new StaleDocumentError();
+    await tx.$executeRaw`
     INSERT INTO "DocumentChunk" (
       "id",
       "documentId",
@@ -31,8 +38,10 @@ export const createVector = async (
       ${content},
       ${chunkIndex},
       ${vectorStr}::vector
-    );
+    ) ON CONFLICT ("documentId", "chunkIndex") DO UPDATE
+    SET content = EXCLUDED.content, embedding = EXCLUDED.embedding;
   `;
+  }, { maxWait: 10_000, timeout: 10_000 });
 };
 
 
@@ -45,7 +54,7 @@ export const getVectorsByDocumentId = async (
   documentId: string
 ) => {
   const result = await prisma.$queryRaw`
-    SELECT *
+    SELECT "id", "documentId", "content", "chunkIndex", "createdAt", embedding::text AS embedding
     FROM "DocumentChunk"
     WHERE "documentId" = ${documentId}
     ORDER BY "chunkIndex";
@@ -69,21 +78,21 @@ export const searchSimilarVectors = async (
   const vectorStr = `[${embedding.join(",")}]`;
   if (documentId) {
     return await prisma.$queryRaw`
-      SELECT dc.*, d."originalName" AS "documentName",
+      SELECT dc.id, dc."documentId", dc.content, dc."chunkIndex", d."originalName" AS "documentName",
              dc.embedding <=> ${vectorStr}::vector AS distance
       FROM "DocumentChunk" dc
       JOIN "Document" d ON dc."documentId" = d.id
-      WHERE d."userId" = ${userId} AND d.id = ${documentId}
+      WHERE d."userId" = ${userId} AND d.id = ${documentId} AND d.status = 'COMPLETED'
       ORDER BY distance ASC
       LIMIT ${limit};
     `;
   }
   return await prisma.$queryRaw`
-    SELECT dc.*, d."originalName" AS "documentName",
+    SELECT dc.id, dc."documentId", dc.content, dc."chunkIndex", d."originalName" AS "documentName",
            dc.embedding <=> ${vectorStr}::vector AS distance
     FROM "DocumentChunk" dc
     JOIN "Document" d ON dc."documentId" = d.id
-    WHERE d."userId" = ${userId}
+    WHERE d."userId" = ${userId} AND d.status = 'COMPLETED'
     ORDER BY distance ASC
     LIMIT ${limit};
   `;

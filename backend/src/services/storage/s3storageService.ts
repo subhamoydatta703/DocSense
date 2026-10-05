@@ -14,7 +14,7 @@ export const uploadFile = async (fileBuffer: Buffer , key: string): Promise<stri
             Key: key,
             ServerSideEncryption: "AES256",
         });
-        await s3Client.send(command);
+        await s3Client.send(command, { abortSignal: AbortSignal.timeout(30_000) });
         return key;
     } catch (error) {
         console.error("Error uploading file:", error);
@@ -50,7 +50,7 @@ export const getFile = async (key: string): Promise<Buffer> => {
             Key: key,
         })
 
-        const response = await s3Client.send(command);
+        const response = await s3Client.send(command, { abortSignal: AbortSignal.timeout(30_000) });
         if (!response.Body) {
             throw new Error("File not found");
         }
@@ -73,7 +73,7 @@ export const deleteFile = async (key: string): Promise<void> => {
             Bucket: process.env.AWS_S3_BUCKET_NAME!,
             Key: key,
         });
-        await s3Client.send(command);
+        await s3Client.send(command, { abortSignal: AbortSignal.timeout(30_000) });
     } catch (error) {
         console.error("Error deleting file:", error);
         throw error;

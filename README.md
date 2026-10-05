@@ -1,5 +1,7 @@
 # DocSense
 
+Deployment and reliability verification: [backend/DEPLOYMENT.md](./backend/DEPLOYMENT.md).
+
 **AI-powered document intelligence — parse, embed, and query unstructured documents through natural conversation.**
 
 DocSense ingests documents from four source types — **PDF files**, **web pages (URLs)**, **YouTube videos/transcripts/media**, and **raw pasted text** — chunks and embeds them into a vector store, and exposes a retrieval-augmented Q&A interface so users can query their own knowledge base conversationally, with every answer traceable back to its source.

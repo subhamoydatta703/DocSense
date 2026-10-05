@@ -6,9 +6,9 @@ import { extractPDFText } from "../../utils/pdfParser";
 /**
  * Fetches raw file buffer from S3 and extracts text content (PDF parsing or plain UTF-8 text).
  */
-export const getParsedData = async (fileId: string): Promise<String> => {
+export const getParsedData = async (fileId: string, source?: { s3Key: string; sourceType: string }): Promise<string> => {
     try {
-        const document = await prisma.document.findUnique({
+        const document = source ?? await prisma.document.findUnique({
             where: { id: fileId },
             select: { s3Key: true, sourceType: true },
         });

@@ -1,10 +1,11 @@
+import { randomUUID } from "node:crypto";
 
 import type { Response } from "express";
 import type { AuthenticatedRequest } from "../../middlewares/authMiddleware";
 import { webUrlContentService } from '../../services/web-url/weburlService';
 import { uploadFile } from '../../services/storage/s3storageService';
 
-import { DocumentQueue } from '../../queue/documentQueue';
+import { enqueueDocument } from '../../queue/documentQueue';
 import { createFileDBWebUrl } from '../../services/web-url/uploadWebUrlService';
 import { CreateWebUrlSchema, assertPublicHttpsUrl } from '../../utils/urlSecurity';
 import z from 'zod';
@@ -29,7 +30,7 @@ export const webUrlContent = async (req: AuthenticatedRequest, res: Response) =>
 
         const safeName = originalName.replace(/[<>:"/\\|?*\x00-\x1F]/g, "_");
 
-        const s3Key = `web-sources/${Date.now()}-${safeName}.txt`;
+        const s3Key = `web-sources/${randomUUID()}-${safeName}.txt`;
 
         // Upload to S3
         const buffer = Buffer.from(content, "utf-8");
@@ -40,18 +41,13 @@ export const webUrlContent = async (req: AuthenticatedRequest, res: Response) =>
 
         console.info("Web source record created", { documentId: fileData.Document.id });
 
-        await DocumentQueue.add(
-            "document-analysis",
-            {
-                documentId: fileData.Document.id,
-            },
-        );
+        await enqueueDocument(fileData.Document);
 
 
 
         return res.status(200).json({
             success: true,
-            message: "Document uploaded and processing started successfully",
+            message: "Document saved. Processing will start when the queue is available.",
             fileData,
         });
 

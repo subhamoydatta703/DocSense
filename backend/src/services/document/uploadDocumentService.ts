@@ -1,75 +1,9 @@
 import { prisma } from "../../config/db/db";
-import { redisClient } from "../../config/redis/redisCaching";
-import { CreateDocumentSchema } from "../../utils/validation";
 import { deleteFile } from "../storage/s3storageService";
-import { deleteVectorsByDocumentId } from "../vectors/vectorService";
+import { saveDocumentSource } from "./saveDocumentSource";
 
-/**
- * Creates or updates a PDF document record in Postgres, cleaning up old S3 files and vector chunks on duplicates.
- */
-export const createFileDB = async (
-  s3Key: string,
-  originalName: string,
-  userId: string
-) => {
-  // Check for duplicates based on originalName AND userId
-  const existingDocument = await prisma.document.findFirst({
-    where: {
-      originalName: originalName,
-      userId: userId,
-    },
-  });
-  console.info("Checked for an existing document", { duplicateFound: Boolean(existingDocument) });
-
-  if (existingDocument) {
-    // Clean up old file from S3
-    try {
-      await deleteFile(existingDocument.s3Key);
-    } catch (err) {
-      console.error("Failed to delete old file from S3:", err);
-    }
-
-    // delete chunks
-    try {
-      await deleteVectorsByDocumentId(existingDocument.id);
-    } catch (error) {
-      console.error("Error deleting old chunks in upload document service: ", error);
-      throw error;
-    }
-
-    const cacheKey = `user:${userId}:Document:${existingDocument.id}`;
-    try {
-      await redisClient.del(cacheKey);
-    } catch (err) {
-      console.error("Failed to invalidate Redis cache:", err);
-    }
-
-    const updatedDocument = await prisma.document.update({
-      where: { id: existingDocument.id },
-      data: {
-        fileName: originalName,
-        s3Key: s3Key,
-        status: "PENDING",
-      },
-    });
-
-    return { Document: updatedDocument };
-  }
-
-  const validatedDocument = CreateDocumentSchema.parse({
-    fileName: originalName,
-    s3Key: s3Key,
-    originalName: originalName,
-    userId: userId,
-  });
-
-  const Document = await prisma.document.create({
-    data: validatedDocument,
-  });
-
-  return { Document };
-};
-
+export const createFileDB = (s3Key: string, originalName: string, userId: string) =>
+  saveDocumentSource({ s3Key, originalName, fileName: originalName, userId, sourceType: "PDF" });
 /**
  * Updates document metadata for the authorized document owner.
  */
@@ -94,7 +28,7 @@ export const updateDocumentService = async (DocumentID: string, userId: string, 
 };
 
 /**
- * Removes S3 file, deletes pgvector chunks, invalidates cache, and deletes document record.
+ * Deletes the document and chunks atomically, then removes its storage object.
  */
 export const deleteDocumentService = async (DocumentID: string, userId: string) => {
   const Document = await prisma.document.findUnique({
@@ -110,26 +44,24 @@ export const deleteDocumentService = async (DocumentID: string, userId: string) 
     throw new Error("Unauthorized: You do not own this Document");
   }
 
-  // Delete from S3
+  // Lock the same row as chunk writes, then cascade-delete atomically.
+  const deleted = await prisma.$transaction(async tx => {
+    const current = await tx.$queryRaw<Array<{ s3Key: string }>>`
+      SELECT "s3Key" FROM "Document" WHERE id = ${DocumentID} AND "userId" = ${userId} FOR UPDATE
+    `;
+    if (!current[0]) throw new Error("Document not found");
+    await tx.document.delete({ where: { id: DocumentID } });
+    return current[0];
+  });
+
+  // Remove storage only after the database deletion succeeds.
   try {
-    await deleteFile(Document.s3Key);
+    await deleteFile(deleted.s3Key);
   } catch (err) {
     console.error("Error deleting from S3 during delete service: ", err);
   }
 
-  // delete chunks
-  try {
-    await deleteVectorsByDocumentId(DocumentID);
-
-  } catch (error) {
-    console.error("Error deleting vectors from DB during delete service: ", error);
-    throw error;
-  }
-
-
-  return await prisma.document.delete({
-    where: { id: DocumentID },
-  });
+  return deleted;
 };
 
 /**

@@ -78,7 +78,10 @@ export default function ChatMessage({ msg, documentName, onCitationClick }: Chat
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
               components={{
-                code({ inline, className, children, ...props }: any) {
+                code({ children, ...props }) {
+                  const codeProps = { ...props };
+                  delete codeProps.node;
+                  delete codeProps.className;
                   const rawContent = String(children);
                   // Remove all literal backticks and backslashes inside the code block globally
                   const content = rawContent.replace(/[`\\]/g, '').trim();
@@ -87,7 +90,7 @@ export default function ChatMessage({ msg, documentName, onCitationClick }: Chat
                     return (
                       <code
                         className="font-mono bg-stone-50 dark:bg-gray-900 text-[#1A1815] dark:text-brand-text rounded px-1.5 py-0.5 text-[11px] border border-stone-200 dark:border-gray-850 break-all whitespace-pre-wrap inline-block max-w-full align-middle my-0.5"
-                        {...props}
+                        {...codeProps}
                       >
                         {content}
                       </code>
@@ -97,16 +100,18 @@ export default function ChatMessage({ msg, documentName, onCitationClick }: Chat
                     <div className="my-2.5 overflow-x-auto w-full max-w-full bg-stone-50 dark:bg-gray-900 border border-stone-200 dark:border-gray-850 rounded-md p-3">
                       <code
                         className="font-mono text-[11px] text-[#1A1815] dark:text-brand-text whitespace-pre block max-w-full"
-                        {...props}
+                        {...codeProps}
                       >
                         {content}
                       </code>
                     </div>
                   );
                 },
-                strong({ children, ...props }: any) {
+                strong({ children, ...props }) {
+                  const strongProps = { ...props };
+                  delete strongProps.node;
                   return (
-                    <strong className="text-[#C4791F] dark:text-brand-accent font-semibold" {...props}>
+                    <strong className="text-[#C4791F] dark:text-brand-accent font-semibold" {...strongProps}>
                       {children}
                     </strong>
                   );

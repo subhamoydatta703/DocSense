@@ -3,7 +3,7 @@ import { aiQueryOptimization } from "../../config/ai/ai";
 /**
  * Rewrites user queries using Step-Back Prompting to improve semantic retrieval quality.
  */
-export const optimizeQuery = async(originalQuery: string): Promise<string>=>{
+export const optimizeQuery = async(originalQuery: string, signal?: AbortSignal): Promise<string>=>{
 
     const prompt = `
 You are a query optimization assistant for a Retrieval-Augmented Generation (RAG) system.
@@ -41,7 +41,8 @@ ${originalQuery}
     const response = await aiQueryOptimization.models.generateContent({
         model: "gemini-3.6-flash",
         contents: prompt,
+        config: { temperature: 0, abortSignal: AbortSignal.any([AbortSignal.timeout(10_000), ...(signal ? [signal] : [])]) },
     });
 
-    return response.text ?? originalQuery;
+    return response.text?.trim() || originalQuery;
 }

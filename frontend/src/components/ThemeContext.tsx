@@ -1,13 +1,5 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-
-type Theme = 'light' | 'dark';
-
-interface ThemeContextType {
-  theme: Theme;
-  toggleTheme: () => void;
-}
-
-const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
+import React, { useState, useEffect } from 'react';
+import { ThemeContext, type Theme } from './useTheme';
 
 /**
  * Provides light and dark theme context state and manages the dark class on the document element.
@@ -33,15 +25,4 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       {children}
     </ThemeContext.Provider>
   );
-}
-
-/**
- * Custom React hook to access current theme state and theme toggle function.
- */
-export function useTheme() {
-  const context = useContext(ThemeContext);
-  if (!context) {
-    throw new Error('useTheme must be used within a ThemeProvider');
-  }
-  return context;
 }

@@ -1,6 +1,6 @@
 import { SignInButton } from '@clerk/clerk-react';
 import { FileText, Search, ShieldCheck, Database, MessageSquare, Sun, Moon } from 'lucide-react';
-import { useTheme } from './ThemeContext';
+import { useTheme } from './useTheme';
 
 /**
  * Renders unauthenticated marketing splash page with features overview and sign-in button.

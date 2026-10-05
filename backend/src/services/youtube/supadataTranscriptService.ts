@@ -1,8 +1,12 @@
 const SUPADATA_TRANSCRIPT_URL = "https://api.supadata.ai/v1/transcript";
-const SUPADATA_TIMEOUT_MS = 45_000;
+import { setTimeout as sleep } from "node:timers/promises";
+const SUPADATA_TIMEOUT_MS = 85_000;
 
 type SupadataTranscriptPayload = {
-  content?: Array<{ text?: unknown }>;
+  content?: Array<{ text?: unknown }> | string;
+  jobId?: string;
+  status?: string;
+  result?: { content?: Array<{ text?: unknown }> | string };
 };
 
 export class YoutubeTranscriptProviderError extends Error {
@@ -31,7 +35,8 @@ export async function getSupadataTranscript(videoUrl: string): Promise<string | 
     const url = new URL(SUPADATA_TRANSCRIPT_URL);
     url.searchParams.set("url", videoUrl);
 
-    const response = await fetch(url, {
+    const request = async (requestUrl: URL) => {
+    const response = await fetch(requestUrl, {
       headers: { "x-api-key": apiKey },
       signal: controller.signal,
     });
@@ -63,8 +68,23 @@ export async function getSupadataTranscript(videoUrl: string): Promise<string | 
       );
     }
 
-    const payload = await response.json() as SupadataTranscriptPayload;
-    const transcript = (payload.content ?? [])
+    return { payload: await response.json() as SupadataTranscriptPayload, status: response.status };
+    };
+    let { payload, status } = await request(url);
+    if (status === 202 || payload.jobId) {
+      if (!payload.jobId) throw new YoutubeTranscriptProviderError(502, "The transcript provider returned an invalid job reference.");
+      const jobUrl = new URL(`${SUPADATA_TRANSCRIPT_URL}/${encodeURIComponent(payload.jobId)}`);
+      do {
+        await sleep(2_000, undefined, { signal: controller.signal });
+        ({ payload } = await request(jobUrl));
+        if (payload.status === "failed") throw new YoutubeTranscriptProviderError(422, "The transcript provider could not process this video.");
+        if (payload.status !== "queued" && payload.status !== "active" && payload.status !== "completed") {
+          throw new YoutubeTranscriptProviderError(502, "The transcript provider returned an invalid job status.");
+        }
+      } while (payload.status !== "completed");
+    }
+    const content = payload.result?.content ?? payload.content;
+    const transcript = typeof content === "string" ? content.trim() : (Array.isArray(content) ? content : [])
       .map((segment) => typeof segment.text === "string" ? segment.text.trim() : "")
       .filter(Boolean)
       .join(" ")
@@ -82,7 +102,7 @@ export async function getSupadataTranscript(videoUrl: string): Promise<string | 
     if (error instanceof YoutubeTranscriptProviderError) {
       throw error;
     }
-    if (error instanceof DOMException && error.name === "AbortError") {
+    if (controller.signal.aborted) {
       throw new YoutubeTranscriptProviderError(
         504,
         "The transcript provider timed out while processing this video.",
