@@ -85,7 +85,13 @@ async function requestPublicHtml(url: URL): Promise<{ statusCode: number; locati
         Accept: "text/html,application/xhtml+xml",
       },
       servername: url.hostname,
-      lookup: (_hostname, _options, callback) => {
+      lookup: (_hostname, options, callback) => {
+        // Family auto-selection requests an array. Return only the IP already
+        // validated above so the connection remains protected from DNS rebinding.
+        if (options.all) {
+          callback(null, [{ address: resolved.address, family: resolved.family }]);
+          return;
+        }
         callback(null, resolved.address, resolved.family);
       },
     }, (response) => {
