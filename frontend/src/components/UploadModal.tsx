@@ -101,7 +101,7 @@ export default function UploadModal({ initialType = 'PDF', onClose, onSuccess }:
         <h2 id={id + '-title'} className="font-serif text-xl">Add source</h2>
         <button type="button" disabled={isUploading} aria-label="Close add source dialog" onClick={onClose} className="p-2 rounded hover:bg-stone-200 dark:hover:bg-white/10 disabled:opacity-40"><X className="h-5 w-5" /></button>
       </div>
-      <p id={id + '-description'} className="mt-2 text-xs text-stone-500 dark:text-brand-muted leading-relaxed">Choose a source format. After it is saved, wait for Ready in your library before asking questions.</p>
+      <p id={id + '-description'} className="mt-2 text-xs text-stone-500 dark:text-brand-muted leading-relaxed">Each upload adds a separate source, even if its name or URL matches an existing one. Wait for Ready before asking questions. To replace an existing source, use its replacement action in your library after the new source is ready.</p>
       <form onSubmit={event => void handleSubmit(event)} className="mt-5">
         <fieldset disabled={isUploading}>
           <legend className="text-xs font-medium mb-2">Source format</legend>

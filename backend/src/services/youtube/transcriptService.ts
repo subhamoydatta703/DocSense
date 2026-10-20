@@ -12,6 +12,7 @@ import { withDeadline } from "../../utils/deadline";
 import { ServiceError } from "../../errors/serviceError";
 import { assertReadableSource } from "../../utils/sourceText";
 import { z } from "zod";
+import { getTranscriptWithFallback } from "./transcriptFallback";
 
 const TranscriptCacheSchema = z.object({
     transcriptContent: z.string().min(20).max(500_000),
@@ -185,10 +186,54 @@ export class YoutubeTranscriptUnavailableError extends Error {
     }
 }
 
-/**
- * Retrieves YouTube video transcript using Redis caching, Supadata provider, or fallback scraper.
- */
+async function fetchVideoMetadata(videoId: string, sourceUrl: string, acquisitionSignal: AbortSignal) {
+    const fallback = { title: `YouTube video ${videoId}`, channel: "Unknown Channel" };
+    try {
+        const response = await fetchYouTube({
+            url: `https://www.youtube.com/oembed?url=${encodeURIComponent(sourceUrl)}&format=json`,
+            headers: BROWSER_HEADERS,
+            signal: AbortSignal.any([acquisitionSignal, AbortSignal.timeout(3_000)]),
+        }, "metadata", videoId);
+        if (!response.ok) return fallback;
+        const metadata = await response.json();
+        return {
+            title: typeof metadata.title === "string" && metadata.title.trim() ? metadata.title.trim().slice(0, 1000) : fallback.title,
+            channel: typeof metadata.author_name === "string" && metadata.author_name.trim() ? metadata.author_name.trim().slice(0, 1000) : fallback.channel,
+        };
+    } catch (error) {
+        acquisitionSignal.throwIfAborted();
+        console.warn("Video metadata unavailable; using the video ID", { errorType: error instanceof Error ? error.name : "UnknownError" });
+        return fallback;
+    }
+}
+
+async function fetchPublicCaptions(videoId: string, acquisitionSignal: AbortSignal): Promise<string> {
+    const signal = AbortSignal.any([acquisitionSignal, AbortSignal.timeout(30_000)]);
+    try {
+        const segments = await fetchTranscript(videoId, {
+            userAgent: BROWSER_HEADERS["User-Agent"],
+            retries: TRANSCRIPT_RETRIES,
+            retryDelay: 1_000,
+            videoFetch: params => fetchYouTube({ ...params, signal }, "watch-page", videoId),
+            playerFetch: async params => {
+                const response = await fetchYouTube({ ...params, signal }, "player", videoId);
+                await logPlayerResponse(response, videoId);
+                return response;
+            },
+            transcriptFetch: params => fetchYouTube({ ...params, signal }, "transcript", videoId),
+        });
+        return segments.map(segment => segment.text).join(" ");
+    } catch (error) {
+        signal.throwIfAborted();
+        if (error instanceof YoutubeTranscriptRateLimitedError) throw error;
+        if (isNoTranscriptError(error)) throw new YoutubeTranscriptUnavailableError(videoId);
+        throw new ServiceError(502, "Could not fetch public captions for this video.");
+    }
+}
+
+/** Retrieves a validated transcript with optional metadata and bounded provider fallback. */
 export const transcriptYoutubeVideo = async (videoUrl: string) => {
+    const acquisitionSignal = AbortSignal.timeout(70_000);
     try {
         console.log("Fetching video transcript...");
         const videoId = extractVideoId(videoUrl);
@@ -212,65 +257,12 @@ export const transcriptYoutubeVideo = async (videoUrl: string) => {
             );
         }
 
-        // 1. Metadata via oEmbed
-        const oembedRes = await fetchYouTube(
-            {
-                url: `https://www.youtube.com/oembed?url=${encodeURIComponent(sourceUrl)}&format=json`,
-                headers: BROWSER_HEADERS,
-            },
-            "metadata",
-            videoId,
-        );
-        if (!oembedRes.ok) {
-            throw new ServiceError(oembedRes.status >= 500 ? 502 : 422, "YouTube could not return metadata for this video.");
-        }
-        const oembed = await oembedRes.json();
-        const title = typeof oembed.title === "string" && oembed.title.trim() ? oembed.title.slice(0, 1000) : "Unknown Title";
-        const channel = typeof oembed.author_name === "string" && oembed.author_name.trim() ? oembed.author_name.slice(0, 1000) : "Unknown Channel";
-
-        // 2. Use the configured transcript provider first. It handles the
-        // provider's own caption/ASR fallback without exposing its API key.
-        let transcriptContent: string;
-        const providerTranscript = await getSupadataTranscript(sourceUrl);
-        if (providerTranscript) {
-            transcriptContent = providerTranscript;
-            console.info(`[YouTube transcript] provider transcript retrieved for ${videoId}`);
-        } else {
-            // No provider key is configured, so retain the existing public-
-            // caption attempt for local development and captioned videos.
-            try {
-                const segments = await fetchTranscript(videoId, {
-                    userAgent: BROWSER_HEADERS["User-Agent"],
-                    retries: TRANSCRIPT_RETRIES,
-                    retryDelay: 1_000,
-                    videoFetch: (params) => fetchYouTube(params, "watch-page", videoId),
-                    playerFetch: async (params) => {
-                        const response = await fetchYouTube(params, "player", videoId);
-                        await logPlayerResponse(response, videoId);
-                        return response;
-                    },
-                    transcriptFetch: (params) => fetchYouTube(params, "transcript", videoId),
-                });
-                transcriptContent = segments.map((s) => s.text).join(" ");
-            } catch (transcriptErr: any) {
-                if (transcriptErr instanceof YoutubeTranscriptRateLimitedError) {
-                    throw transcriptErr;
-                }
-                if (isNoTranscriptError(transcriptErr)) {
-                    console.warn(
-                        `[YouTube transcript] no accessible captions for ${videoId}:`,
-                        transcriptErr?.message || transcriptErr,
-                    );
-                    throw new YoutubeTranscriptUnavailableError(videoId);
-                } else {
-                    console.error(
-                        `[YouTube transcript] failed for ${videoId}: ${transcriptErr?.name || "UnknownError"}`,
-                        transcriptErr?.message || transcriptErr,
-                    );
-                    throw new Error(`Could not fetch transcript for video: ${transcriptErr?.message || transcriptErr}`);
-                }
-            }
-        }
+        const { title, channel } = await fetchVideoMetadata(videoId, sourceUrl, acquisitionSignal);
+        const transcriptContent = await getTranscriptWithFallback({
+            fetchProviderTranscript: () => getSupadataTranscript(sourceUrl,
+                AbortSignal.any([acquisitionSignal, AbortSignal.timeout(35_000)])),
+            fetchPublicCaptions: () => fetchPublicCaptions(videoId, acquisitionSignal),
+        }, acquisitionSignal);
         console.info("YouTube transcript retrieved", {
             videoId,
             characterCount: transcriptContent.length,

@@ -68,3 +68,6 @@ Thumbs.db
 
 # Prisma generated files
 /backend/prisma/generated/
+
+# Local pipeline fix requirements and progress tracking
+/backend/docs/

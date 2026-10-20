@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
-import { Send, Loader2 } from 'lucide-react';
+import { Send, Loader2, Library } from 'lucide-react';
 import { isCancel } from 'axios';
 import { api, getApiErrorDetails, getApiErrorMessage } from '../api/apiClient';
 import { parseQueryResponse } from '../api/queryResponse';
@@ -11,7 +11,7 @@ import Sidebar from './Sidebar';
 import ChatMessage from './ChatMessage';
 import type { Message } from './ChatMessage';
 
-interface QAWorkspaceProps { document: Document; onBack: () => void }
+interface QAWorkspaceProps { document?: Document; onBack: () => void }
 
 function SourceDetails({ source }: { source: Document }) {
   const info = getSourceInfo(source.sourceType), url = publicSourceUrl(source.sourceUrl);
@@ -36,7 +36,9 @@ export default function QAWorkspace({ document: initialSource, onBack }: QAWorks
   const [checkingSource, setCheckingSource] = useState(false);
   const [messages, setMessages] = useState<Message[]>([{
     id: 'welcome', sender: 'notice',
-    text: initialSource.originalName + ' is ready for questions. Ask about its contents and inspect the supporting passages below each answer.',
+    text: initialSource
+      ? initialSource.originalName + ' is ready for questions. Ask about its contents and inspect the supporting passages below each answer.'
+      : 'Ask about all your ready sources. Summaries and comparisons require complete context; focused answers disclose their coverage limits.',
     timestamp: new Date(),
   }]);
   const [inputQuery, setInputQuery] = useState('');
@@ -45,8 +47,10 @@ export default function QAWorkspace({ document: initialSource, onBack }: QAWorks
   const requestRef = useRef<AbortController | null>(null);
   const sourceRequestRef = useRef<AbortController | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const info = getSourceInfo(source.sourceType), Icon = info.icon;
-  const ready = source.status === 'COMPLETED' && !sourceMissing && !sourceProblem && !checkingSource;
+  const info = source ? getSourceInfo(source.sourceType) : { icon: Library, label: 'All ready sources' };
+  const Icon = info.icon;
+  const sourceName = source?.originalName ?? 'All ready sources';
+  const ready = (!source || source.status === 'COMPLETED') && !sourceMissing && !sourceProblem && !checkingSource;
 
   useEffect(() => () => { requestRef.current?.abort(); sourceRequestRef.current?.abort(); }, []);
   useEffect(() => {
@@ -57,6 +61,7 @@ export default function QAWorkspace({ document: initialSource, onBack }: QAWorks
   useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages, isLoading]);
 
   const refreshSource = useCallback(async () => {
+    if (!initialSource) return;
     sourceRequestRef.current?.abort();
     const controller = new AbortController();
     sourceRequestRef.current = controller;
@@ -75,10 +80,10 @@ export default function QAWorkspace({ document: initialSource, onBack }: QAWorks
     } finally {
       if (sourceRequestRef.current === controller && !controller.signal.aborted) { setCheckingSource(false); sourceRequestRef.current = null; }
     }
-  }, [initialSource.id]);
+  }, [initialSource]);
 
   useEffect(() => {
-    if (sourceMissing || (source.status !== 'PENDING' && source.status !== 'PROCESSING')) return;
+    if (!source || sourceMissing || (source.status !== 'PENDING' && source.status !== 'PROCESSING')) return;
     let stopped = false;
     let timer: ReturnType<typeof setTimeout>;
     const poll = async () => {
@@ -87,7 +92,7 @@ export default function QAWorkspace({ document: initialSource, onBack }: QAWorks
     };
     timer = setTimeout(poll, 10_000);
     return () => { stopped = true; clearTimeout(timer); };
-  }, [source.status, sourceMissing, refreshSource]);
+  }, [source, sourceMissing, refreshSource]);
 
   const sendQuery = async (query: string) => {
     const question = query.trim();
@@ -97,10 +102,10 @@ export default function QAWorkspace({ document: initialSource, onBack }: QAWorks
     setMessages(prev => [...prev, { id: crypto.randomUUID(), sender: 'user', text: question, timestamp: new Date() }]);
     setInputQuery(''); setIsLoading(true);
     try {
-      const response = await api.post('/query', { query: question, documentId: source.id }, { signal: controller.signal });
+      const response = await api.post('/query', { query: question, ...(source ? { documentId: source.id } : {}) }, { signal: controller.signal });
       const result = parseQueryResponse(response.data);
       if (controller.signal.aborted) return;
-      setMessages(prev => [...prev, { id: crypto.randomUUID(), sender: 'ai', text: result.answer, timestamp: new Date(), citations: result.citations, abstained: result.abstained }]);
+      setMessages(prev => [...prev, { id: crypto.randomUUID(), sender: 'ai', text: result.answer, timestamp: new Date(), citations: result.citations, abstained: result.abstained, coverage: result.coverage }]);
     } catch (error: unknown) {
       if (controller.signal.aborted || isCancel(error)) return;
       const details = getApiErrorDetails(error);
@@ -112,8 +117,8 @@ export default function QAWorkspace({ document: initialSource, onBack }: QAWorks
       const prefix = details.stage && stages[details.stage] ? stages[details.stage] + '. ' : '';
       const guidance = details.retryAfterSeconds ? ' Wait ' + details.retryAfterSeconds + ' seconds before trying again.' : '';
       if (details.retryAfterSeconds) setRetryDelay(details.retryAfterSeconds);
-      if (details.status === 404) { setSourceMissing(true); setSourceProblem('This source is no longer available. Return to your sources.'); }
-      if (details.status === 409) {
+      if (details.status === 404 && source) { setSourceMissing(true); setSourceProblem('This source is no longer available. Return to your sources.'); }
+      if (details.status === 409 && source) {
         setSourceProblem('Source details changed. Checking its current status…');
         void refreshSource();
       }
@@ -132,22 +137,22 @@ export default function QAWorkspace({ document: initialSource, onBack }: QAWorks
   };
 
   return <div className="flex flex-col md:flex-row h-[100dvh] w-full overflow-hidden bg-[#FAF8F3] dark:bg-[#0A0A0B] text-[#1A1815] dark:text-[#F5F3EE]">
-    <Sidebar activeItem="qa" onNavigate={item => item === 'dashboard' && onBack()} documentName={source.originalName} />
+    <Sidebar activeItem="qa" onNavigate={item => item === 'dashboard' && onBack()} documentName={sourceName} />
     <main className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden">
       <header className="border-b border-stone-200 dark:border-gray-800 p-4 md:px-6 shrink-0">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
             <Icon className="h-5 w-5 shrink-0 text-[#C4791F] dark:text-brand-accent" />
-            <div className="min-w-0"><h1 className="truncate font-serif text-lg" title={source.originalName}>{source.originalName}</h1><p className="text-xs text-stone-500 dark:text-brand-muted">{info.label}</p></div>
+            <div className="min-w-0"><h1 className="truncate font-serif text-lg" title={sourceName}>{sourceName}</h1><p className="text-xs text-stone-500 dark:text-brand-muted">{info.label}</p></div>
           </div>
-          <span className="text-xs shrink-0">{sourceMissing ? 'Unavailable' : checkingSource ? 'Checking…' : sourceProblem ? 'Status unverified' : STATUS_LABELS[source.status]}</span>
+          <span className="text-xs shrink-0">{sourceMissing ? 'Unavailable' : checkingSource ? 'Checking…' : sourceProblem ? 'Status unverified' : source ? STATUS_LABELS[source.status] : 'Library search'}</span>
         </div>
         <details className="mt-3 lg:hidden">
           <summary className="cursor-pointer text-xs underline">Source details</summary>
-          <div className="mt-3 max-h-[35dvh] overflow-y-auto rounded-md border border-stone-200 dark:border-gray-800 p-4"><SourceDetails source={source} /></div>
+          <div className="mt-3 max-h-[35dvh] overflow-y-auto rounded-md border border-stone-200 dark:border-gray-800 p-4">{source ? <SourceDetails source={source} /> : <p>Searches your completed sources. Pending and failed sources are excluded.</p>}</div>
         </details>
       </header>
-      {!ready && <div role="status" className="border-b border-stone-200 dark:border-gray-800 bg-[#C4791F]/5 px-4 md:px-6 py-3 text-sm shrink-0">
+      {!ready && source && <div role="status" className="border-b border-stone-200 dark:border-gray-800 bg-[#C4791F]/5 px-4 md:px-6 py-3 text-sm shrink-0">
         <p>{sourceMissing ? 'This source is no longer available.' : checkingSource ? 'Checking the current source status…' : sourceProblem || (source.status === 'FAILED' ? source.failureReason || 'Processing failed. Add a corrected source from your library.' : 'This source is ' + STATUS_LABELS[source.status].toLowerCase() + '. Questions will be available when it is ready.')}</p>
         <div className="flex gap-4 mt-2">
           <button onClick={onBack} className="underline text-xs">Back to sources</button>
@@ -183,7 +188,7 @@ export default function QAWorkspace({ document: initialSource, onBack }: QAWorks
       </div>
     </main>
     <aside aria-label="Source details" className="hidden lg:block w-72 shrink-0 h-full overflow-y-auto border-l border-stone-200 dark:border-gray-800 p-6">
-      <h2 className="font-serif text-lg mb-5">Source details</h2><SourceDetails source={source} />
+      <h2 className="font-serif text-lg mb-5">Source details</h2>{source ? <SourceDetails source={source} /> : <p className="text-xs leading-relaxed">Searches all your completed sources. Pending and failed sources are excluded. Expand each citation to see which source supports the answer.</p>}
     </aside>
   </div>;
 }

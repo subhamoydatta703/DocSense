@@ -11,6 +11,7 @@ export interface Message {
   citations?: SourceCitation[];
   abstained?: boolean;
   retryQuery?: string;
+  coverage?: string;
 }
 interface ChatMessageProps {
   msg: Message;
@@ -28,6 +29,7 @@ export default function ChatMessage({ msg, source }: ChatMessageProps) {
           isError ? 'bg-rose-500/10 border border-rose-500/30 text-rose-700 dark:text-rose-300' :
             'bg-white dark:bg-[#141312] border border-stone-200 dark:border-gray-800 text-[#1A1815] dark:text-brand-text')}>
       {msg.abstained && <p className="mb-2 text-xs font-semibold text-[#C4791F] dark:text-brand-accent">Insufficient source evidence</p>}
+      {msg.coverage && <p className="mb-2 text-xs text-stone-500 dark:text-brand-muted">{msg.coverage}</p>}
       {isUser || isError || isNotice ? <p className="whitespace-pre-wrap break-words">{msg.text}</p>
         : <div className="prose dark:prose-invert prose-sm max-w-none break-words prose-pre:overflow-x-auto">
           <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.text}</ReactMarkdown>

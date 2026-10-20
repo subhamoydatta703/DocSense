@@ -16,6 +16,12 @@ test('source disclosures display the actual quoted evidence and document', () =>
   expect(html).toContain(citation.quote);
   expect(html).not.toContain('verified');
 });
+
+test('coverage limits are displayed separately from supported answer claims', () => {
+  const coverage = 'Uses selected matching passages; other sources may not be covered.';
+  expect(render({ text: 'A supported answer.', coverage, citations: [citation] })).toContain(coverage);
+  expect(() => parseQueryResponse({ success: true, answer: 'Supported', citations: [citation], abstained: false, coverage: 42 })).toThrow();
+});
 test('code retains backslashes and question text retains citation-like words', () => {
   expect(render({ text: '```text\nC:\\docs\\policy.txt\n```' })).toContain('C:\\docs\\policy.txt');
   expect(render({ sender: 'user', text: 'What does Chunk 1 mean?' })).toContain('What does Chunk 1 mean?');

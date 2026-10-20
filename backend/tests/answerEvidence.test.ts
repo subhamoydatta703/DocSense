@@ -46,3 +46,31 @@ test("untrusted replacement characters remain literal in legacy prompt builders"
   expect(buildInputGuardrailPrompt(value)).toContain(value);
   expect(buildOutputGuardrailPrompt(value)).toContain(value);
 });
+
+test("ordered Markdown list markers do not become unsupported quantities", () => {
+  expect(parseGroundedAnswer(answer("1. A receipt is required.", "A receipt is required."), [chunk]).abstained).toBeFalse();
+  expect(parseGroundedAnswer(answer("1. Returns are accepted within 90 days."), [chunk]).abstained).toBeTrue();
+});
+
+test("English whole-number words and percentages support equivalent digit representations", () => {
+  for (const [evidence, claim] of [
+    ["Returns are accepted for thirty days.", "Returns are accepted for 30 days."],
+    ["Returns are accepted for 30 days.", "Returns are accepted for thirty days."],
+    ["The limit is one thousand two hundred and fifty items.", "The limit is 1,250 items."],
+    ["The discount is twenty percent.", "The discount is 20%."],
+  ] as const) {
+    const source = { ...chunk, content: evidence };
+    expect(parseGroundedAnswer(answer(claim, evidence), [source]).abstained).toBeFalse();
+  }
+  expect(parseGroundedAnswer(answer("Returns are accepted for ninety days."), [chunk]).abstained).toBeTrue();
+});
+
+test("fenced code numbers and percentage changes still need matching numeric evidence", () => {
+  expect(parseGroundedAnswer(answer("```text\n1. A receipt is required.\n```", "A receipt is required."), [chunk]).abstained).toBeTrue();
+  expect(parseGroundedAnswer(answer("The discount is 42%."), [chunk]).abstained).toBeTrue();
+});
+
+test("adjacent number words cannot manufacture an unsupported combined quantity", () => {
+  const source = { ...chunk, content: "Labels one two appear on the form." };
+  expect(parseGroundedAnswer(answer("Label 3 appears.", source.content), [source]).abstained).toBeTrue();
+});

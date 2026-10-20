@@ -7,10 +7,11 @@ import type { SourceType } from '../config/sources';
 import type { Document } from '../App';
 import UploadModal from './UploadModal';
 import Sidebar from './Sidebar';
+import ReplaceSourceForm from './ReplaceSourceForm';
 
-interface DashboardProps { onSelectDocument: (doc: Document) => void }
+interface DashboardProps { onSelectDocument: (doc: Document) => void; onAskLibrary: () => void }
 
-export default function Dashboard({ onSelectDocument }: DashboardProps) {
+export default function Dashboard({ onSelectDocument, onAskLibrary }: DashboardProps) {
   const [documents, setDocuments] = useState<Document[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState('ALL');
@@ -75,6 +76,14 @@ export default function Dashboard({ onSelectDocument }: DashboardProps) {
     } finally { setDeletingIds(current => current.filter(id => id !== doc.id)); }
   };
 
+  const handleSourceReplaced = (updatedSource: Document, replacementId: string) => {
+    setDocuments(current => current
+      .filter(source => source.id !== replacementId)
+      .map(source => source.id === updatedSource.id ? updatedSource : source));
+    setNotice('Source replaced successfully. Its new content is ready for questions.');
+    setRefreshCount(count => count + 1);
+  };
+
   const filteredDocuments = filterSources(documents, searchQuery, typeFilter, statusFilter);
   const resetFilters = () => { setSearchQuery(''); setTypeFilter('ALL'); setStatusFilter('ALL'); };
   return <div className="flex flex-col md:flex-row h-[100dvh] w-full overflow-hidden bg-[#FAF8F3] dark:bg-[#0A0A0B] text-[#1A1815] dark:text-[#F5F3EE]">
@@ -101,6 +110,7 @@ export default function Dashboard({ onSelectDocument }: DashboardProps) {
         </div>}
         <div>
           <h1 className="text-2xl font-serif">Your sources</h1>
+          {documents.some(source => source.status === 'COMPLETED') && <button onClick={onAskLibrary} className="mt-3 underline text-sm">Ask all ready sources</button>}
           <p className="mt-2 text-sm text-stone-500 dark:text-brand-muted">PDFs, websites, video transcripts, and pasted text in one library. Open a ready source to ask questions.</p>
         </div>
         {documents.length > 0 && <div className="flex flex-wrap items-end gap-4">
@@ -155,6 +165,8 @@ export default function Dashboard({ onSelectDocument }: DashboardProps) {
                     {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
                   </button>
                 </div>
+                {(ready || failed) && <ReplaceSourceForm source={doc} sources={documents}
+                  disabled={deletingIds.length > 0} onReplaced={handleSourceReplaced} />}
               </article>;
             })}
           </div>}

@@ -20,11 +20,14 @@ export interface Document {
 
 function SignedInApp() {
   const [selectedDocument, setSelectedDocument] = useState<Document | null>(null);
+  const [askingLibrary, setAskingLibrary] = useState(false);
+
+  if (askingLibrary) return <QAWorkspace key="library" onBack={() => setAskingLibrary(false)} />;
 
   if (selectedDocument) {
     return <QAWorkspace key={selectedDocument.id} document={selectedDocument} onBack={() => setSelectedDocument(null)} />;
   }
-  return <Dashboard onSelectDocument={setSelectedDocument} />;
+  return <Dashboard onSelectDocument={setSelectedDocument} onAskLibrary={() => setAskingLibrary(true)} />;
 }
 
 function MainApp() {

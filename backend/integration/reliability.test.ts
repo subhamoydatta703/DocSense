@@ -32,6 +32,7 @@ integration("isolated PostgreSQL and Redis", () => {
   let prisma: typeof import("../src/config/db/db").prisma;
   let vectors: typeof import("../src/services/vectors/vectorService");
   let sources: typeof import("../src/services/document/saveDocumentSource");
+  let replacements: typeof import("../src/services/document/replaceDocumentService");
   let queue: typeof import("../src/queue/documentQueue");
   let redis: typeof import("../src/config/redis/redisBullMQ");
   let worker: typeof import("../src/services/worker/workerService");
@@ -52,6 +53,7 @@ integration("isolated PostgreSQL and Redis", () => {
     ({ prisma } = await import("../src/config/db/db"));
     vectors = await import("../src/services/vectors/vectorService");
     sources = await import("../src/services/document/saveDocumentSource");
+    replacements = await import("../src/services/document/replaceDocumentService");
     queue = await import("../src/queue/documentQueue");
     redis = await import("../src/config/redis/redisBullMQ");
     worker = await import("../src/services/worker/workerService");
@@ -114,6 +116,34 @@ integration("isolated PostgreSQL and Redis", () => {
     expect(result.citations[0]).toMatchObject({ documentId: doc.id, chunkIndex: 0, quote: "Items can be returned within 42 days of purchase." });
     expect(JSON.stringify(result)).not.toContain(doc.s3Key);
   });
+  test("retrieval skips unreadable leaders and library search includes different documents", async () => {
+    const first = await createDocument();
+    const second = await createDocument();
+    for (let index = 0; index < 6; index++) {
+      await vectors.createVector(first.id, "-- 1 of 1 --", index, embedding, first.s3Key);
+    }
+    await vectors.createVector(first.id, "First readable policy.", 6, embedding, first.s3Key);
+    await vectors.createVector(second.id, "Second readable policy.", 0, embedding, second.s3Key);
+    expect((await vectors.searchSimilarVectors(embedding, userId, first.id)).map(chunk => chunk.content))
+      .toEqual(["First readable policy."]);
+    const libraryMatches = await vectors.searchSimilarVectors(embedding, userId);
+    expect(new Set(libraryMatches.map(chunk => chunk.documentId))).toEqual(new Set([first.id, second.id]));
+    expect(await vectors.searchSimilarVectors(embedding, randomUUID())).toEqual([]);
+  });
+
+  test("complete library context contains every ready source and excludes other owners", async () => {
+    const first = await createDocument();
+    const second = await createDocument();
+    await vectors.createVector(first.id, "First readable policy.", 0, embedding, first.s3Key);
+    await vectors.createVector(second.id, "Second readable policy.", 0, embedding, second.s3Key);
+    expect(new Set((await vectors.getSummaryChunks(userId)).map(chunk => chunk.documentId)))
+      .toEqual(new Set([first.id, second.id]));
+    expect(await vectors.getSummaryChunks(randomUUID())).toEqual([]);
+    const result = await queries.userQueryWithEvidence("Compare all sources", userId);
+    expect(result.abstained).toBeFalse();
+    expect(result.coverage).toContain("all ready sources");
+  });
+
   test("query readiness and ownership are enforced using real database rows", async () => {
     const doc = await createDocument("PENDING");
     const pendingError = await queries.userQueryWithEvidence("question", userId, doc.id).then(() => null, error => error);
@@ -185,12 +215,100 @@ integration("isolated PostgreSQL and Redis", () => {
     expect(error).toMatchObject({ message: "Document was replaced or deleted while processing." });
     expect(await prisma.documentChunk.count({ where: { documentId: doc.id } })).toBe(0);
   });
-  test("simultaneous source uploads serialize to one document", async () => {
+  test("simultaneous same-name uploads preserve both documents and their storage objects", async () => {
     const base = { fileName: "source.txt", originalName: "source.txt", userId, sourceType: "TEXT" as const };
     const saved = await Promise.all([sources.saveDocumentSource({ ...base, s3Key: "upload-a" }), sources.saveDocumentSource({ ...base, s3Key: "upload-b" })]);
-    expect(saved[0].Document.id).toBe(saved[1].Document.id);
-    expect(await prisma.document.count({ where: { userId } })).toBe(1);
-    expect(deletedObjects).toHaveLength(1);
+    expect(saved[0].Document.id).not.toBe(saved[1].Document.id);
+    expect(await prisma.document.count({ where: { userId } })).toBe(2);
+    expect(deletedObjects).toHaveLength(0);
+  });
+
+  const replacementRequest = (current: { id: string; s3Key: string }, replacement: { id: string; s3Key: string }) => ({
+    documentId: current.id, replacementId: replacement.id,
+    expectedSourceKey: current.s3Key, expectedReplacementKey: replacement.s3Key,
+  });
+
+  test("explicit replacement activates ready chunks under the original ID and rejects stale writes", async () => {
+    const current = await createDocument();
+    const replacement = await createDocument();
+    await vectors.createVector(current.id, "Old readable content.", 0, embedding, current.s3Key);
+    await vectors.createVector(replacement.id, "New readable content.", 0, embedding, replacement.s3Key);
+    const updated = await replacements.replaceDocumentService(userId, replacementRequest(current, replacement));
+    expect(updated).toMatchObject({ id: current.id, s3Key: replacement.s3Key, status: "COMPLETED" });
+    expect(await prisma.document.findUnique({ where: { id: replacement.id } })).toBeNull();
+    expect(await prisma.documentChunk.findMany({ where: { documentId: current.id }, select: { content: true } }))
+      .toEqual([{ content: "New readable content." }]);
+    expect(deletedObjects).toEqual([current.s3Key]);
+    // Await the transaction before asserting: Bun's rejection matchers can
+    // stall this interactive Prisma transaction before its callback is entered.
+    const oldWriteError = await vectors.createVector(current.id, "Late old write.", 0, embedding, current.s3Key)
+      .then(() => null, error => error);
+    expect(oldWriteError).toMatchObject({ message: "Document was replaced or deleted while processing." });
+    const stagedWriteError = await vectors.createVector(replacement.id, "Late staged write.", 0, embedding, replacement.s3Key)
+      .then(() => null, error => error);
+    expect(stagedWriteError).toMatchObject({ message: "Document was replaced or deleted while processing." });
+  });
+
+  test("failed or foreign replacement leaves the original source answerable", async () => {
+    const current = await createDocument();
+    const replacement = await createDocument("PENDING");
+    await vectors.createVector(current.id, "Current source remains readable.", 0, embedding, current.s3Key);
+    const request = replacementRequest(current, replacement);
+    for (const status of ["PENDING", "PROCESSING", "FAILED"] as const) {
+      await prisma.document.update({ where: { id: replacement.id }, data: { status } });
+      const readinessError = await replacements.replaceDocumentService(userId, request).then(() => null, error => error);
+      expect(readinessError).toMatchObject({ status: 409 });
+    }
+    const ownershipError = await replacements.replaceDocumentService(randomUUID(), request).then(() => null, error => error);
+    expect(ownershipError).toMatchObject({ status: 404 });
+    expect((await queries.userQueryWithEvidence("What does this source say?", userId, current.id)).abstained).toBeFalse();
+    expect((await prisma.document.findUnique({ where: { id: current.id } }))?.s3Key).toBe(current.s3Key);
+    expect(deletedObjects).toEqual([]);
+  });
+
+  test("concurrent explicit replacements permit only one activation of an expected version", async () => {
+    const current = await createDocument();
+    const first = await createDocument();
+    const second = await createDocument();
+    await vectors.createVector(current.id, "Old content.", 0, embedding, current.s3Key);
+    await vectors.createVector(first.id, "First replacement.", 0, embedding, first.s3Key);
+    await vectors.createVector(second.id, "Second replacement.", 0, embedding, second.s3Key);
+    const results = await Promise.allSettled([
+      replacements.replaceDocumentService(userId, replacementRequest(current, first)),
+      replacements.replaceDocumentService(userId, replacementRequest(current, second)),
+    ]);
+    expect(results.filter(result => result.status === "fulfilled")).toHaveLength(1);
+    const rejected = results.find(result => result.status === "rejected");
+    expect(rejected).toMatchObject({ status: "rejected", reason: { status: 409 } });
+    expect(await prisma.document.count({ where: { userId } })).toBe(2);
+    expect(await prisma.documentChunk.count({ where: { documentId: current.id } })).toBe(1);
+    expect(deletedObjects).toEqual([current.s3Key]);
+  });
+
+  test("deleting a staged replacement while activation waits preserves the original", async () => {
+    const current = await createDocument();
+    const replacement = await createDocument();
+    await vectors.createVector(current.id, "Original content.", 0, embedding, current.s3Key);
+    await vectors.createVector(replacement.id, "Replacement content.", 0, embedding, replacement.s3Key);
+    let lockAcquired!: () => void;
+    let releaseLock!: () => void;
+    const locked = new Promise<void>(resolve => { lockAcquired = resolve; });
+    const released = new Promise<void>(resolve => { releaseLock = resolve; });
+    const deletion = prisma.$transaction(async transaction => {
+      await transaction.$queryRaw`SELECT id FROM "Document" WHERE id = ${replacement.id} FOR UPDATE`;
+      lockAcquired();
+      await released;
+      await transaction.document.delete({ where: { id: replacement.id } });
+    });
+    await locked;
+    const activation = replacements.replaceDocumentService(userId, replacementRequest(current, replacement))
+      .then(() => null, error => error);
+    try { await sleep(50); } finally { releaseLock(); }
+    await deletion;
+    expect(await activation).toMatchObject({ status: 404 });
+    expect((await prisma.document.findUnique({ where: { id: current.id } }))?.s3Key).toBe(current.s3Key);
+    expect(await prisma.documentChunk.count({ where: { documentId: current.id } })).toBe(1);
+    expect(deletedObjects).toEqual([]);
   });
   test("durable pending rows recover into real BullMQ jobs", async () => {
     const doc = await createDocument("PENDING");
@@ -248,7 +366,7 @@ integration("isolated PostgreSQL and Redis", () => {
       expect(attempts).toBe(3);
     } finally { await retryWorker.close(); }
   });
-  test("a real processing worker cannot overwrite a replacement during embedding", async () => {
+  test("adding a same-name upload while processing preserves both independent sources", async () => {
     const doc = await createDocument("PENDING");
     const started = new Promise<void>(resolve => { embeddingStarted = resolve; });
     blockedEmbedding = new Promise<void>(resolve => { releaseEmbedding = resolve; });
@@ -259,9 +377,12 @@ integration("isolated PostgreSQL and Redis", () => {
     releaseEmbedding!();
     await waitFor(async () => await job!.getState() === "completed");
     const current = await prisma.document.findUnique({ where: { id: doc.id } });
-    expect(current?.s3Key).toBe(replacement.Document.s3Key);
-    expect(current?.status).toBe("PENDING");
-    expect(await prisma.documentChunk.count({ where: { documentId: doc.id } })).toBe(0);
+    expect(current?.s3Key).toBe(doc.s3Key);
+    expect(current?.status).toBe("COMPLETED");
+    expect(await prisma.documentChunk.count({ where: { documentId: doc.id } })).toBeGreaterThan(0);
+    const addedSource = await prisma.document.findUnique({ where: { id: replacement.Document.id } });
+    expect(addedSource?.s3Key).toBe("replacement-source");
+    expect(addedSource?.status).toBe("PENDING");
     await worker.stopWorker();
   });
 });

@@ -7,7 +7,7 @@ export interface SourceCitation {
   sourceVersion: string;
   quote: string;
 }
-export interface QueryResponse { success: true; answer: string; citations: SourceCitation[]; abstained: boolean }
+export interface QueryResponse { success: true; answer: string; citations: SourceCitation[]; abstained: boolean; coverage?: string }
 
 export function parseQueryResponse(value: unknown): QueryResponse {
   if (!value || typeof value !== 'object') throw new Error('The server returned an invalid answer.');
@@ -15,6 +15,7 @@ export function parseQueryResponse(value: unknown): QueryResponse {
   if (data.success !== true || typeof data.answer !== 'string' || !data.answer.trim() ||
       typeof data.abstained !== 'boolean' || !Array.isArray(data.citations)) throw new Error('The server returned an invalid answer.');
   const ids = new Set<number>();
+  if (data.coverage !== undefined && typeof data.coverage !== 'string') throw new Error('The server returned invalid coverage details.');
   for (const citation of data.citations) {
     if (!citation || !Number.isInteger(citation.id) || citation.id < 1 || ids.has(citation.id) ||
         typeof citation.chunkId !== 'string' || !citation.chunkId || typeof citation.documentId !== 'string' ||

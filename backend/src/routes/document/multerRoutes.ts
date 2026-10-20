@@ -5,6 +5,7 @@ import { authMiddleware } from "../../middlewares/authMiddleware";
 import { rateLimiter } from "../../middlewares/rateLimiterMiddleware";
 import multer from "multer";
 import { deleteDocument, getDocuments, getDocumentById } from "../../controllers/document/documentController";
+import { replaceDocumentController } from "../../controllers/document/replaceDocumentController";
 
 const router = Router();
 
@@ -39,6 +40,8 @@ router.post("/upload", authMiddleware, rateLimiter, (req, res, next) => {
 });
 
 router.delete("/documents/:documentId", authMiddleware, rateLimiter, deleteDocument);
+
+router.post("/documents/:documentId/replacement", authMiddleware, rateLimiter, replaceDocumentController);
 
 
 export default router;
