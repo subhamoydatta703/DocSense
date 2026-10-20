@@ -10,6 +10,7 @@ import { GuardrailError } from "../../errors/guardRailError";
 import { ServiceError, runQueryStage } from "../../errors/serviceError";
 import { prisma } from "../../config/db/db";
 import { queryPolicy } from "../../config/ai/policy";
+import { needsCompleteContext } from "./queryIntent";
 
 export const userQueryWithEvidence = async (query: string, userId: string, documentId?: string, signal?: AbortSignal): Promise<QueryAnswer> => {
   if (documentId) {
@@ -21,14 +22,22 @@ export const userQueryWithEvidence = async (query: string, userId: string, docum
   }
   const guard = await runQueryStage("input_guard", () => inputGuardrail(query, signal), signal);
   if (!guard.safe) throw new GuardrailError(guard.reason, guard.category);
-  const summarizing = Boolean(documentId
-    && /\b(summar(?:y|ize|ise)|overview|key (?:points|takeaways))\b/i.test(query)
-    && !/\b(section|clause|chapter|paragraph|page|topic)\b/i.test(query));
+  const summarizing = needsCompleteContext(query);
+  let expectedLibrarySources: Array<{ id: string; s3Key: string }> | undefined;
   let chunks: RetrievedChunk[];
-  if (summarizing && documentId) {
+  if (summarizing) {
+    if (!documentId) {
+      expectedLibrarySources = await runQueryStage("retrieval", () => prisma.document.findMany({
+        where: { userId, status: "COMPLETED" }, select: { id: true, s3Key: true },
+      }), signal);
+    }
     chunks = await runQueryStage("retrieval", () => getSummaryChunks(userId, documentId), signal);
     if (chunks.length > 30 || chunks.reduce((total, chunk) => total + chunk.content.length, 0) > 30_000) {
-      return { answer: "This document is too long for a complete summary in one request. Ask about a specific section or topic.", citations: [], abstained: true };
+      const scope = documentId ? "This document is" : "Your ready sources are";
+      return { answer: `${scope} too long for a complete summary or comparison in one request. Select a source or ask about a specific section or topic.`, citations: [], abstained: true };
+    }
+    if (expectedLibrarySources?.some(source => !chunks.some(chunk => chunk.documentId === source.id && hasReadableText(chunk.content)))) {
+      return { answer: "Some ready sources have no readable indexed text. Reprocess those sources or select a source before requesting a complete library answer.", citations: [], abstained: true };
     }
   } else {
     let retrievalQuery = query;
@@ -41,12 +50,12 @@ export const userQueryWithEvidence = async (query: string, userId: string, docum
       }
     }
     const embedding = await runQueryStage("embedding", () => createEmbeddings(retrievalQuery, signal, "interactive"), signal);
-    chunks = await runQueryStage("retrieval", () => searchSimilarVectors(embedding, userId, documentId), signal);
+    chunks = await runQueryStage("retrieval", () => searchSimilarVectors(embedding, userId, documentId, 5, signal), signal);
   }
   const relevant = chunks.filter(chunk => Number.isFinite(chunk.distance) && chunk.distance <= 0.4 && hasReadableText(chunk.content));
   console.info("Vector search completed", { resultCount: chunks.length, relevantCount: relevant.length });
   if (!relevant.length) return abstention();
-  const answer = await runQueryStage("answer_generation", () => generateGroundedAnswer(query, relevant, signal), signal);
+  const answer = await runQueryStage("answer_generation", () => generateGroundedAnswer(query, relevant, signal, summarizing), signal);
   if (answer.abstained) return answer;
   // Quotes and source names are also part of the content released to the browser.
   const output = await runQueryStage("output_guard", () => outputGuardrail(JSON.stringify(answer), signal), signal);
@@ -54,9 +63,15 @@ export const userQueryWithEvidence = async (query: string, userId: string, docum
   if (!output.safe) throw new GuardrailError(output.reason, output.category);
   await runQueryStage("source_validation", async () => {
     const documents = await prisma.document.findMany({
-      where: { userId, id: { in: [...new Set(relevant.map(chunk => chunk.documentId))] } },
+      where: expectedLibrarySources
+        ? { userId, status: "COMPLETED" }
+        : { userId, id: { in: [...new Set(relevant.map(chunk => chunk.documentId))] } },
       select: { id: true, status: true, s3Key: true },
     });
+    if (expectedLibrarySources && (documents.length !== expectedLibrarySources.length ||
+        expectedLibrarySources.some(source => !documents.some(current => current.id === source.id && current.s3Key === source.s3Key)))) {
+      throw new ServiceError(409, "Your ready sources changed while answering. Please ask again.", "source_validation");
+    }
     for (const chunk of relevant) {
       const current = documents.find(document => document.id === chunk.documentId);
       if (!current || current.status !== "COMPLETED" || current.s3Key !== chunk.sourceKey) {
@@ -64,7 +79,12 @@ export const userQueryWithEvidence = async (query: string, userId: string, docum
       }
     }
   }, signal);
-  return answer;
+  return {
+    ...answer,
+    coverage: summarizing
+      ? documentId ? "Uses the complete indexed text of this source." : "Uses the complete indexed text of all ready sources."
+      : "Uses selected matching passages; other sections, sources, or exceptions may not be covered.",
+  };
 };
 
 /** Keep the text-only service interface for internal callers. */

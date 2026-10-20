@@ -21,11 +21,16 @@ const tx = {
     update: mock(async ({ data }: { data: object }) => ({ ...source, ...data })),
     delete: mock(async (_args: unknown) => source),
   },
-  documentChunk: { deleteMany: mock(async (_args: unknown) => ({ count: 1 })) },
+  documentChunk: {
+    deleteMany: mock(async (_args: unknown) => ({ count: 1 })),
+    updateMany: mock(async (_args: unknown) => ({ count: 1 })),
+    findMany: mock(async (_args: unknown) => [{ content: "Readable replacement content." }]),
+  },
 };
 const prisma = {
   $queryRaw: rawQuery, $executeRaw: rawExecute, $transaction: transaction,
   document: {
+    create: mock(async ({ data }: { data: object }) => ({ ...data, id: crypto.randomUUID(), status: "PENDING" })),
     findUnique: mock(async (_args: unknown) => source),
     findFirst: mock(async (_args: unknown) => source),
     findMany: mock(async (_args: unknown) => source ? [source] : []),
@@ -87,6 +92,7 @@ mock.module("../src/config/redis/redisCaching", () => ({ redisClient: { isReady:
 const { createVector, searchSimilarVectors } = await import("../src/services/vectors/vectorService");
 const { processDocumentService } = await import("../src/services/processing/processDocumentService");
 const { saveDocumentSource } = await import("../src/services/document/saveDocumentSource");
+const { replaceDocumentService } = await import("../src/services/document/replaceDocumentService");
 const { enqueueDocument, recoverUnqueuedDocuments, documentJobId } = await import("../src/queue/documentQueue");
 const { startWorker, stopWorker } = await import("../src/services/worker/workerService");
 const { getSupadataTranscript } = await import("../src/services/youtube/supadataTranscriptService");
@@ -103,6 +109,10 @@ beforeEach(() => {
   source = { id: "document", s3Key: "new-upload", sourceType: "PDF", status: "COMPLETED", userId: "user" };
   chunks = ["first chunk", "second chunk"];
   for (const fn of [rawQuery, rawExecute, updateMany, transaction, deleteFile, generateContent, guardContent, optimizeContent, embedContent, upload, getFile, deleteMedia, queueAdd, getJob, tx.$queryRaw, tx.documentChunk.deleteMany, tx.document.update, prisma.document.findMany]) fn.mockReset();
+  prisma.document.create.mockReset().mockImplementation(async ({ data }) => ({ ...data, id: crypto.randomUUID(), status: "PENDING" }));
+  tx.document.delete.mockReset().mockImplementation(async () => source);
+  tx.documentChunk.updateMany.mockReset().mockImplementation(async () => ({ count: 1 }));
+  tx.documentChunk.findMany.mockReset().mockImplementation(async () => [{ content: "Readable replacement content." }]);
   transaction.mockImplementation(async operation => operation(tx));
   rawExecute.mockImplementation(async () => 1);
   deleteFile.mockImplementation(async () => undefined);
@@ -151,6 +161,31 @@ test("retrieval excludes unsupported embedding columns and incomplete documents"
     expect(sql).toContain("COMPLETED");
   }
 });
+test("unreadable top matches cannot hide readable evidence in a later candidate page", async () => {
+  const unreadable = Array.from({ length: 50 }, (_, index) => ({ ...chunkMetadata,
+    id: `blank-${index}`, content: "-- 1 of 1 --", documentName: "Blank", distance: 0.1 }));
+  const readable = { ...chunkMetadata, id: "readable", content: "A receipt is required.", documentName: "Policy", distance: 0.2 };
+  rawQuery.mockResolvedValueOnce(unreadable).mockResolvedValueOnce([readable]);
+  expect(await searchSimilarVectors([0.1], "user", "document")).toEqual([readable]);
+  expect(rawQuery).toHaveBeenCalledTimes(2);
+});
+
+test("main-findings questions receive complete selected-source context", async () => {
+  rawQuery.mockResolvedValueOnce([{ ...chunkMetadata, id: "chunk", content: "The main finding is supported.", documentName: "Report", distance: 0 }]);
+  const result = await userQueryService("What are the main findings?", "user", "document");
+  expect(result).toContain("main finding");
+  expect(embedContent).not.toHaveBeenCalled();
+});
+
+test("library summaries include all ready sources or explicitly reject incomplete context", async () => {
+  rawQuery.mockResolvedValueOnce([{ ...chunkMetadata, id: "chunk", content: "Readable policy.", documentName: "Policy", distance: 0 }]);
+  expect(await userQueryService("Summarize all sources", "user")).toContain("Readable policy");
+  expect(embedContent).not.toHaveBeenCalled();
+  prisma.document.findMany.mockResolvedValueOnce([source!, { ...source!, id: "missing-source" }]);
+  rawQuery.mockResolvedValueOnce([{ ...chunkMetadata, id: "chunk", content: "Readable policy.", documentName: "Policy", distance: 0 }]);
+  expect(await userQueryService("Summarize all sources", "user")).toContain("no readable indexed text");
+});
+
 test("stale processing jobs stop before extracting or embedding content", async () => {
   await expect(processDocumentService("document", "old-upload")).rejects.toThrow("replaced or deleted");
   expect(embedContent).not.toHaveBeenCalled();
@@ -166,19 +201,101 @@ test("a transient embedding failure never marks a partial document completed", a
   await expect(processDocumentService("document", "new-upload")).rejects.toThrow("temporary failure");
   expect(updateMany).toHaveBeenCalledTimes(1);
 });
-test("replacements clear chunks inside the transaction and clean old storage afterwards", async () => {
+test("adding a source preserves existing chunks and storage", async () => {
   const saved = await saveDocumentSource({ s3Key: "replacement", fileName: "file.pdf", originalName: "file.pdf", userId: "user", sourceType: "PDF" });
-  expect(tx.documentChunk.deleteMany).toHaveBeenCalledTimes(1);
+  expect(tx.documentChunk.deleteMany).not.toHaveBeenCalled();
   expect(saved.Document.s3Key).toBe("replacement");
   expect(saved.Document.status).toBe("PENDING");
-  expect(deleteFile).toHaveBeenCalledWith("new-upload");
+  expect(deleteFile).not.toHaveBeenCalled();
 });
-test("failed source transactions clean the new object, never the old source", async () => {
-  transaction.mockRejectedValueOnce(new Error("transaction failed"));
+test("failed source creation cleans the new object, never the old source", async () => {
+  prisma.document.create.mockRejectedValueOnce(new Error("transaction failed"));
   await expect(saveDocumentSource({ s3Key: "replacement", fileName: "file.pdf", originalName: "file.pdf", userId: "user", sourceType: "PDF" })).rejects.toThrow("transaction failed");
   expect(deleteFile).toHaveBeenCalledWith("replacement");
   expect(deleteFile).not.toHaveBeenCalledWith("new-upload");
 });
+test("same-name and same-URL uploads create independent sources without deleting old content", async () => {
+  for (const sourceType of ["PDF", "TEXT", "WEBSITE", "YOUTUBE"] as const) {
+    const upload = { s3Key: "upload-a", fileName: "source", originalName: "source", userId: "user", sourceType,
+      ...(["WEBSITE", "YOUTUBE"].includes(sourceType) ? { sourceUrl: "https://example.com/source" } : {}) };
+    const first = await saveDocumentSource(upload);
+    const second = await saveDocumentSource({ ...upload, s3Key: "upload-b" });
+    expect(first.Document.id).not.toBe(second.Document.id);
+    expect(first.Document.s3Key).toBe("upload-a");
+    expect(second.Document.status).toBe("PENDING");
+  }
+  expect(tx.documentChunk.deleteMany).not.toHaveBeenCalled();
+  expect(tx.document.update).not.toHaveBeenCalled();
+  expect(deleteFile).not.toHaveBeenCalled();
+});
+
+const replacementRequest = {
+  documentId: "document", replacementId: "ready-replacement",
+  expectedSourceKey: "new-upload", expectedReplacementKey: "replacement-upload",
+};
+function mockReplacementSources(overrides: object = {}) {
+  const current = { ...source!, fileName: "old.txt", originalName: "Old source", sourceUrl: "https://example.com/old" };
+  const replacement = { ...current, id: "ready-replacement", s3Key: "replacement-upload",
+    originalName: "New source", fileName: "new.txt", sourceUrl: null, ...overrides };
+  tx.$queryRaw.mockResolvedValueOnce([current, replacement]);
+}
+
+test("explicit replacement moves indexed content atomically and retains the original document ID", async () => {
+  mockReplacementSources();
+  const document = await replaceDocumentService("user", replacementRequest);
+  expect(document).toMatchObject({ id: "document", s3Key: "replacement-upload", status: "COMPLETED", sourceUrl: null, failureReason: null });
+  expect(tx.documentChunk.deleteMany).toHaveBeenCalledWith({ where: { documentId: "document" } });
+  expect(tx.documentChunk.updateMany).toHaveBeenCalledWith({ where: { documentId: "ready-replacement" }, data: { documentId: "document" } });
+  expect(tx.document.delete).toHaveBeenCalledWith({ where: { id: "ready-replacement" } });
+  expect(deleteFile).toHaveBeenCalledWith("new-upload");
+  expect(deleteFile).not.toHaveBeenCalledWith("replacement-upload");
+});
+
+test("unready, failed, mismatched and changed replacement sources cannot remove the current source", async () => {
+  for (const overrides of [
+    { status: "PENDING" }, { status: "PROCESSING" }, { status: "FAILED" },
+    { sourceType: "TEXT" }, { s3Key: "unexpected-version" },
+  ]) {
+    mockReplacementSources(overrides);
+    await expect(replaceDocumentService("user", replacementRequest)).rejects.toBeInstanceOf(Error);
+  }
+  expect(tx.documentChunk.deleteMany).not.toHaveBeenCalled();
+  expect(tx.documentChunk.updateMany).not.toHaveBeenCalled();
+  expect(tx.document.update).not.toHaveBeenCalled();
+  expect(deleteFile).not.toHaveBeenCalled();
+});
+
+test("replacement checks both versions, ownership, readable content and source readiness before writing", async () => {
+  await expect(replaceDocumentService("user", { ...replacementRequest, replacementId: "document" })).rejects.toMatchObject({ status: 400 });
+  tx.$queryRaw.mockResolvedValueOnce([]);
+  await expect(replaceDocumentService("other-user", replacementRequest)).rejects.toMatchObject({ status: 404 });
+  expect(String(tx.$queryRaw.mock.calls[0]![0])).toContain('"userId" = ');
+  expect(tx.$queryRaw.mock.calls[0]!.slice(1)).toContain("other-user");
+  mockReplacementSources();
+  await expect(replaceDocumentService("user", { ...replacementRequest, expectedSourceKey: "stale-version" })).rejects.toMatchObject({ status: 409 });
+  mockReplacementSources();
+  tx.documentChunk.findMany.mockResolvedValueOnce([{ content: "-- 1 of 1 --" }]);
+  await expect(replaceDocumentService("user", replacementRequest)).rejects.toMatchObject({ status: 409 });
+  source!.status = "PROCESSING";
+  mockReplacementSources({ status: "COMPLETED" });
+  await expect(replaceDocumentService("user", replacementRequest)).rejects.toMatchObject({ status: 409 });
+  expect(tx.documentChunk.deleteMany).not.toHaveBeenCalled();
+  expect(deleteFile).not.toHaveBeenCalled();
+});
+
+test("failed replacement transactions preserve both storage objects", async () => {
+  transaction.mockRejectedValueOnce(new Error("transaction rolled back"));
+  await expect(replaceDocumentService("user", replacementRequest)).rejects.toThrow("transaction rolled back");
+  expect(deleteFile).not.toHaveBeenCalled();
+});
+
+test("old storage cleanup failure does not turn an activated replacement into a reported failure", async () => {
+  mockReplacementSources();
+  deleteFile.mockRejectedValueOnce(new Error("storage unavailable"));
+  const document = await replaceDocumentService("user", replacementRequest);
+  expect(document.s3Key).toBe("replacement-upload");
+});
+
 test("queue jobs have bounded retry and a distinct ID per upload", async () => {
   await enqueueDocument(source!);
   expect(queueOptions.defaultJobOptions).toMatchObject({ attempts: 3, backoff: { type: "exponential", delay: 10_000 } });
@@ -376,6 +493,24 @@ test("a summary of a specific section uses focused retrieval", async () => {
   expect(embedContent).toHaveBeenCalledTimes(1);
   expect(String(rawQuery.mock.calls[0]![0])).toContain("ORDER BY distance");
 });
+test("metadata outages and malformed metadata do not block a working transcript provider", async () => {
+  for (const metadataResponse of [
+    () => new Response("Unavailable", { status: 503 }),
+    () => new Response("invalid JSON", { status: 200 }),
+  ]) {
+    let providerCalls = 0;
+    globalThis.fetch = (async (input: string | URL | Request) => {
+      if (String(input).includes("oembed")) return metadataResponse();
+      providerCalls++;
+      return Response.json({ content: "A readable transcript supplied independently of metadata." });
+    }) as typeof fetch;
+    const result = await transcriptYoutubeVideo("https://www.youtube.com/watch?v=abcdefghijk");
+    expect(result.title).toBe("YouTube video abcdefghijk");
+    expect(result.transcriptContent).toContain("independently of metadata");
+    expect(providerCalls).toBe(1);
+  }
+});
+
 test("valid transcript cache entries avoid external requests", async () => {
   const cached = { transcriptContent: "A readable synthetic video transcript.", title: "Video", channel: "Channel", videoId: "abcdefghijk", sourceUrl: "https://www.youtube.com/watch?v=abcdefghijk" };
   getCache.mockResolvedValueOnce(JSON.stringify(cached));
@@ -612,7 +747,7 @@ test("short-document summaries receive all ordered sections and skip query rewri
   expect(embedContent).not.toHaveBeenCalled();
   const request = generateContent.mock.calls[0]![0] as { contents: string };
   expect(JSON.parse(request.contents).sources).toHaveLength(2);
-  expect(String(rawQuery.mock.calls[0]![0])).toContain('ORDER BY dc."chunkIndex"');
+  expect(String(rawQuery.mock.calls[0]![0])).toContain('ORDER BY d.id, dc."chunkIndex"');
 });
 test("oversized full-document summaries report their limit without presenting partial context as complete", async () => {
   rawQuery.mockResolvedValueOnce(Array.from({ length: 31 }, (_, index) => ({ ...chunkMetadata, id: `chunk-${index}`, content: "context", documentName: "file", distance: 0 })));
@@ -641,6 +776,60 @@ test("successful query HTTP responses include verified quotes and stable source 
   expect(data.citations[0]).toMatchObject({ chunkId: "chunk", quote: "context", documentId: "document" });
   expect(JSON.stringify(data)).not.toContain("new-upload");
 });
+test("advertised MPEG uploads reach transcription and mismatched MIME types fail before AI calls", async () => {
+  const mpeg = Buffer.from([0, 0, 1, 0xb3, 0x2d, 0x01, 0xe0, 0x34, 0, 0, 0, 0, 0, 0, 1, 0xb8, 0, 0, 0, 0]);
+  const validUpload = new FormData();
+  validUpload.append("media", new Blob([mpeg], { type: "video/mpeg" }), "clip.mpeg");
+  const response = await realFetch(`${baseUrl}/api/youtube/media-upload`, { method: "POST", body: validUpload });
+  expect(response.status).toBe(200);
+  expect(upload).toHaveBeenCalledTimes(1);
+  expect(upload.mock.calls[0]![0]).toMatchObject({ config: { mimeType: "video/mpeg" } });
+  upload.mockClear();
+  const mismatchedUpload = new FormData();
+  mismatchedUpload.append("media", new Blob([mpeg], { type: "video/mp4" }), "clip.mpeg");
+  const rejected = await realFetch(`${baseUrl}/api/youtube/media-upload`, { method: "POST", body: mismatchedUpload });
+  expect(rejected.status).toBe(400);
+  expect(upload).not.toHaveBeenCalled();
+});
+
+test("replacement HTTP endpoint validates IDs before any database changes", async () => {
+  const response = await realFetch(`${baseUrl}/api/documents/not-a-uuid/replacement`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(replacementRequest),
+  });
+  expect(response.status).toBe(400);
+  expect(transaction).not.toHaveBeenCalled();
+});
+
+test("replacement HTTP endpoint returns the activated document under the original ID", async () => {
+  source!.id = "11111111-1111-4111-8111-111111111111";
+  const replacementId = "22222222-2222-4222-8222-222222222222";
+  mockReplacementSources({ id: replacementId });
+  const response = await realFetch(`${baseUrl}/api/documents/${source!.id}/replacement`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ replacementId, expectedSourceKey: "new-upload", expectedReplacementKey: "replacement-upload" }),
+  });
+  expect(response.status).toBe(200);
+  expect(await response.json()).toMatchObject({ success: true, document: { id: source!.id, s3Key: "replacement-upload", status: "COMPLETED" } });
+});
+
+test("replacement HTTP endpoint reports missing and changed sources without removing storage", async () => {
+  const documentId = "11111111-1111-4111-8111-111111111111";
+  const replacementId = "22222222-2222-4222-8222-222222222222";
+  source!.id = documentId;
+  tx.$queryRaw.mockResolvedValueOnce([]);
+  const requestOptions = {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ replacementId, expectedSourceKey: "new-upload", expectedReplacementKey: "replacement-upload" }),
+  };
+  const missing = await realFetch(`${baseUrl}/api/documents/${documentId}/replacement`, requestOptions);
+  expect(missing.status).toBe(404);
+  mockReplacementSources({ id: replacementId, s3Key: "changed-source" });
+  const changed = await realFetch(`${baseUrl}/api/documents/${documentId}/replacement`, requestOptions);
+  expect(changed.status).toBe(409);
+  expect(deleteFile).not.toHaveBeenCalled();
+  expect(tx.documentChunk.deleteMany).not.toHaveBeenCalled();
+});
+
 test("missing or foreign documents stop before any provider calls", async () => {
   prisma.document.findFirst.mockResolvedValueOnce(null);
   await expect(userQueryService("question", "user", "unknown-document")).rejects.toMatchObject({ status: 404 });

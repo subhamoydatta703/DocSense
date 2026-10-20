@@ -1,6 +1,8 @@
 import { prisma } from "../../config/db/db";
 import { randomUUID } from "crypto";
 import { StaleDocumentError } from "../../errors/staleDocumentError";
+import { hasReadableText } from "../../utils/sourceText";
+import { ServiceError } from "../../errors/serviceError";
 
 export interface RetrievedChunk {
   id: string;
@@ -83,41 +85,62 @@ export const searchSimilarVectors = async (
   embedding: number[],
   userId: string,
   documentId?: string,
-  limit: number = 5
+  limit: number = 5,
+  signal?: AbortSignal,
 ) => {
   const vectorStr = `[${embedding.join(",")}]`;
-  if (documentId) {
-    return await prisma.$queryRaw<RetrievedChunk[]>`
+  const pageSize = Math.max(50, limit);
+  const readableChunks: RetrievedChunk[] = [];
+  // Page through candidates rather than allowing blank legacy entries to consume
+  // the usable-context limit. The cap makes a badly damaged index fail explicitly.
+  for (let page = 0; page < 20; page++) {
+    signal?.throwIfAborted();
+    const offset = page * pageSize;
+    const candidates = documentId ? await prisma.$queryRaw<RetrievedChunk[]>`
       SELECT dc.id, dc."documentId", dc.content, dc."chunkIndex", d."originalName" AS "documentName", d."s3Key" AS "sourceKey",
              dc.embedding <=> ${vectorStr}::vector AS distance
       FROM "DocumentChunk" dc
       JOIN "Document" d ON dc."documentId" = d.id
       WHERE d."userId" = ${userId} AND d.id = ${documentId} AND d.status = 'COMPLETED'
-      ORDER BY distance ASC
-      LIMIT ${limit};
+        AND (dc.embedding <=> ${vectorStr}::vector) <= 0.4
+      ORDER BY distance ASC, dc.id
+      LIMIT ${pageSize} OFFSET ${offset};
+    ` : await prisma.$queryRaw<RetrievedChunk[]>`
+      WITH ranked_chunks AS (
+        SELECT dc.id, dc."documentId", dc.content, dc."chunkIndex",
+          d."originalName" AS "documentName", d."s3Key" AS "sourceKey",
+          dc.embedding <=> ${vectorStr}::vector AS distance,
+          ROW_NUMBER() OVER (PARTITION BY d.id ORDER BY dc.embedding <=> ${vectorStr}::vector, dc.id) AS source_rank
+        FROM "DocumentChunk" dc JOIN "Document" d ON dc."documentId" = d.id
+        WHERE d."userId" = ${userId} AND d.status = 'COMPLETED'
+          AND (dc.embedding <=> ${vectorStr}::vector) <= 0.4
+      )
+      SELECT id, "documentId", content, "chunkIndex", "documentName", "sourceKey", distance
+      FROM ranked_chunks ORDER BY source_rank, distance, id
+      LIMIT ${pageSize} OFFSET ${offset};
     `;
+    for (const candidate of candidates) {
+      if (Number.isFinite(candidate.distance) && candidate.distance <= 0.4 && hasReadableText(candidate.content)) {
+        readableChunks.push(candidate);
+        if (readableChunks.length === limit) return readableChunks;
+      }
+    }
+    if (candidates.length < pageSize) return readableChunks;
   }
-  return await prisma.$queryRaw<RetrievedChunk[]>`
-    SELECT dc.id, dc."documentId", dc.content, dc."chunkIndex", d."originalName" AS "documentName", d."s3Key" AS "sourceKey",
-           dc.embedding <=> ${vectorStr}::vector AS distance
-    FROM "DocumentChunk" dc
-    JOIN "Document" d ON dc."documentId" = d.id
-    WHERE d."userId" = ${userId} AND d.status = 'COMPLETED'
-    ORDER BY distance ASC
-    LIMIT ${limit};
-  `;
+  throw new ServiceError(409, "Too many unusable index entries were encountered. Reprocess unreadable sources before asking again.", "retrieval");
 };
 
 
 //   Update embedding of a chunk
 
 /** Complete ordered context for a short-document summary, always owner scoped. */
-export const getSummaryChunks = (userId: string, documentId: string) => prisma.$queryRaw<RetrievedChunk[]>`
+export const getSummaryChunks = (userId: string, documentId?: string) => prisma.$queryRaw<RetrievedChunk[]>`
   SELECT dc.id, dc."documentId", dc.content, dc."chunkIndex", d."originalName" AS "documentName",
          d."s3Key" AS "sourceKey", 0::double precision AS distance
   FROM "DocumentChunk" dc JOIN "Document" d ON dc."documentId" = d.id
-  WHERE d."userId" = ${userId} AND d.id = ${documentId} AND d.status = 'COMPLETED'
-  ORDER BY dc."chunkIndex" LIMIT 31;
+  WHERE d."userId" = ${userId} AND d.status = 'COMPLETED'
+    AND (${documentId ?? null}::text IS NULL OR d.id = ${documentId ?? null}::text)
+  ORDER BY d.id, dc."chunkIndex" LIMIT 31;
 `;
 
 /**

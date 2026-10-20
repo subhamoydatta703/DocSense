@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { createHash } from "node:crypto";
 import type { RetrievedChunk } from "../vectors/vectorService";
+import { factualNumbers } from "./numericEvidence";
 
 export const INSUFFICIENT_INFORMATION = "I don't have enough information to answer this question.";
 export interface Citation {
@@ -12,7 +13,7 @@ export interface Citation {
   sourceVersion: string;
   quote: string;
 }
-export interface QueryAnswer { answer: string; citations: Citation[]; abstained: boolean }
+export interface QueryAnswer { answer: string; citations: Citation[]; abstained: boolean; coverage?: string }
 export const abstention = (): QueryAnswer => ({ answer: INSUFFICIENT_INFORMATION, citations: [], abstained: true });
 
 const payloadSchema = z.object({
@@ -37,10 +38,6 @@ export function answerJsonSchema(chunkIds: string[]) {
       } },
     },
   };
-}
-
-function numbers(text: string): string[] {
-  return (text.match(/[+-]?\d+(?:[,.]\d+)*%?/g) ?? []).map(value => value.replaceAll(",", ""));
 }
 
 /** Citation/excerpt checks establish provenance, not semantic entailment. */
@@ -70,8 +67,9 @@ export function parseGroundedAnswer(text: string, chunks: RetrievedChunk[]): Que
       }
       if (!references.includes(citation.id)) references.push(citation.id);
     }
-    const evidenceNumbers = new Set(numbers(claim.evidence.map(item => item.quote).join(" ")));
-    if (numbers(claim.text).some(value => !evidenceNumbers.has(value))) return abstention();
+    // Normalize each quote separately so number words cannot join across sources.
+    const evidenceNumbers = new Set(claim.evidence.flatMap(item => factualNumbers(item.quote)));
+    if (factualNumbers(claim.text, true).some(value => !evidenceNumbers.has(value))) return abstention();
     answer.push(`${claim.text} [Source ${references.join(", ")}]`);
   }
   return { answer: answer.join("\n\n"), citations, abstained: false };
