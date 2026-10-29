@@ -1,5 +1,6 @@
 import { extractWebPageText } from "../../utils/webPageText";
 import { fetchPublicHtml } from "../../utils/urlSecurity";
+import { assertUsableWebPage } from "../../utils/webPageText";
 
 
 /**
@@ -10,10 +11,11 @@ export const webUrlContentService = async (url: string): Promise<{ content: stri
     try {
         const { html, finalUrl } = await fetchPublicHtml(url);
         const { content, title } = extractWebPageText(html);
+        assertUsableWebPage(content, title);
 
         return {
             content,
-            originalName: title || finalUrl.hostname,
+            originalName: (title || finalUrl.hostname).slice(0, 250),
         };
 
     } catch (error) {

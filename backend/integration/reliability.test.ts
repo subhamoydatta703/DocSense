@@ -13,6 +13,7 @@ let embeddingStarted: (() => void) | undefined;
 let releaseEmbedding: (() => void) | undefined;
 let blockedEmbedding: Promise<void> | undefined;
 let beforeAnswer: (() => Promise<void>) | undefined;
+let requiredAnswerText: string | undefined;
 mock.module("../src/services/storage/s3storageService", () => ({
   getFile: async () => Buffer.from("A readable source for the document processing integration test."),
   deleteFile: async (key: string) => { deletedObjects.push(key); },
@@ -23,7 +24,9 @@ mock.module("../src/config/ai/ai", () => ({
   aiQueryOptimization: { models: { generateContent: async () => ({ text: "return policy" }) } },
   ai: { models: { generateContent: async (request: { contents: string }) => {
     await beforeAnswer?.();
-    const source = JSON.parse(request.contents).sources[0];
+    const sources = JSON.parse(request.contents).sources as Array<{ chunkId: string; text: string }>;
+    const source = requiredAnswerText ? sources.find(source => source.text.includes(requiredAnswerText!)) : sources[0];
+    if (!source) return { text: JSON.stringify({ abstained: true, claims: [] }) };
     return { text: JSON.stringify({ abstained: false, claims: [{ text: source.text, evidence: [{ chunkId: source.chunkId, quote: source.text }] }] }) };
   } } },
 }));
@@ -68,6 +71,7 @@ integration("isolated PostgreSQL and Redis", () => {
     embeddingStarted = undefined;
     blockedEmbedding = undefined;
     beforeAnswer = undefined;
+    requiredAnswerText = undefined;
     deletedObjects.length = 0;
     try { await queue.DocumentQueue.drain(true); }
     finally { await prisma.document.deleteMany({ where: { userId } }); }
@@ -115,6 +119,46 @@ integration("isolated PostgreSQL and Redis", () => {
     expect(result.answer).toContain("42 days");
     expect(result.citations[0]).toMatchObject({ documentId: doc.id, chunkIndex: 0, quote: "Items can be returned within 42 days of purchase." });
     expect(JSON.stringify(result)).not.toContain(doc.s3Key);
+  });
+
+  test("pgvector retains readable candidates above the former hard distance cutoff", async () => {
+    const doc = await createDocument();
+    const queryVector = Array(768).fill(0);
+    queryVector[0] = 1;
+    const sourceVector = Array(768).fill(0);
+    sourceVector[0] = 0.45;
+    sourceVector[1] = Math.sqrt(1 - 0.45 ** 2);
+    await vectors.createVector(doc.id, "A receipt is required for returns.", 0, sourceVector, doc.s3Key);
+    const matches = await vectors.searchSimilarVectors(queryVector, userId, doc.id);
+    expect(matches).toHaveLength(1);
+    expect(matches[0]!.distance).toBeCloseTo(0.55);
+    expect(await vectors.searchSimilarVectors(queryVector, randomUUID(), doc.id)).toEqual([]);
+  });
+
+  test("a vague selected-source question reads the indexed introduction", async () => {
+    const doc = await createDocument();
+    await vectors.createVector(doc.id, "Welcome to Wikipedia, the free encyclopedia that anyone can edit.", 0, embedding, doc.s3Key);
+    const answer = await queries.userQueryWithEvidence("what it is?", userId, doc.id);
+    expect(answer.abstained).toBeFalse();
+    expect(answer.answer).toContain("free encyclopedia");
+    expect(answer.citations[0]!.documentId).toBe(doc.id);
+    expect(answer.coverage).toContain("complete indexed text");
+  });
+
+  test("a missed sixth passage is recovered through complete short-source context", async () => {
+    const doc = await createDocument();
+    for (let index = 0; index < 5; index++) {
+      await vectors.createVector(doc.id, "Returns require a receipt.", index, embedding, doc.s3Key);
+    }
+    const distantVector = Array(768).fill(0);
+    distantVector[0] = 1;
+    await vectors.createVector(doc.id, "Delivery takes three days.", 5, distantVector, doc.s3Key);
+    requiredAnswerText = "Delivery takes three days.";
+    const answer = await queries.userQueryWithEvidence("How long does shipping take?", userId, doc.id);
+    expect(answer.abstained).toBeFalse();
+    expect(answer.answer).toContain("Delivery takes three days.");
+    expect(answer.citations[0]!.chunkIndex).toBe(5);
+    expect(answer.coverage).toContain("complete indexed text");
   });
   test("retrieval skips unreadable leaders and library search includes different documents", async () => {
     const first = await createDocument();

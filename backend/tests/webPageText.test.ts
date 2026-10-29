@@ -1,5 +1,12 @@
 import { expect, test } from "bun:test";
-import { extractWebPageText } from "../src/utils/webPageText";
+import { assertUsableWebPage, extractWebPageText } from "../src/utils/webPageText";
+
+test("JavaScript shells and access challenges are rejected before indexing", () => {
+  for (const [content, title] of [["", "App"], ["You need to enable JavaScript to run this app.", "App"], ["Enable JavaScript and cookies to continue", "Just a moment..."]]) {
+    expect(() => assertUsableWebPage(content!, title!)).toThrow();
+  }
+  expect(() => assertUsableWebPage("This article explains how to enable JavaScript in a browser.", "JavaScript guide")).not.toThrow();
+});
 
 test("compact HTML preserves headings, paragraphs and table rows", () => {
   const { content } = extractWebPageText('<article><h1>Return policy</h1><p>Returns accepted.</p><p>A receipt is required.</p><table><tr><th>Plan</th><th>Price</th></tr><tr><td>Basic</td><td>$10</td></tr></table></article>');
@@ -28,4 +35,15 @@ test("body fallback preserves lists and line breaks without indexing hidden or s
   expect(content).toContain("Beta");
   expect(content).not.toContain("secret");
   expect(content).not.toContain("Hidden");
+});
+
+test("empty main placeholders do not hide readable article content", () => {
+  const { content } = extractWebPageText('<main><div hidden>Loading</div></main><article><h1>Delivery</h1><p>Delivery takes three days.</p></article>');
+  expect(content).toContain("Delivery takes three days.");
+});
+
+test("multiple main regions retain all visible source sections", () => {
+  const { content } = extractWebPageText('<main><p>Standard delivery is free.</p></main><main><p>Express delivery costs $15.</p></main>');
+  expect(content).toContain("Standard delivery is free.");
+  expect(content).toContain("Express delivery costs $15.");
 });

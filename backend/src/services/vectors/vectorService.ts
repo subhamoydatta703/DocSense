@@ -102,7 +102,6 @@ export const searchSimilarVectors = async (
       FROM "DocumentChunk" dc
       JOIN "Document" d ON dc."documentId" = d.id
       WHERE d."userId" = ${userId} AND d.id = ${documentId} AND d.status = 'COMPLETED'
-        AND (dc.embedding <=> ${vectorStr}::vector) <= 0.4
       ORDER BY distance ASC, dc.id
       LIMIT ${pageSize} OFFSET ${offset};
     ` : await prisma.$queryRaw<RetrievedChunk[]>`
@@ -113,14 +112,15 @@ export const searchSimilarVectors = async (
           ROW_NUMBER() OVER (PARTITION BY d.id ORDER BY dc.embedding <=> ${vectorStr}::vector, dc.id) AS source_rank
         FROM "DocumentChunk" dc JOIN "Document" d ON dc."documentId" = d.id
         WHERE d."userId" = ${userId} AND d.status = 'COMPLETED'
-          AND (dc.embedding <=> ${vectorStr}::vector) <= 0.4
       )
       SELECT id, "documentId", content, "chunkIndex", "documentName", "sourceKey", distance
       FROM ranked_chunks ORDER BY source_rank, distance, id
       LIMIT ${pageSize} OFFSET ${offset};
     `;
     for (const candidate of candidates) {
-      if (Number.isFinite(candidate.distance) && candidate.distance <= 0.4 && hasReadableText(candidate.content)) {
+      // Distance ranks candidates; it is not a calibrated answerability score.
+      // Exact evidence checks and the output guard decide whether an answer is supported.
+      if (Number.isFinite(candidate.distance) && hasReadableText(candidate.content)) {
         readableChunks.push(candidate);
         if (readableChunks.length === limit) return readableChunks;
       }

@@ -36,7 +36,12 @@ test("rate limit and authentication failures are not retried", async () => {
 
 test("cancellation during backoff stops the second attempt", async () => {
     const operation = mock(async () => { throw Object.assign(new Error("unavailable"), { status: 503 }); });
-    await expect(retryAiRequest(operation, AbortSignal.timeout(50))).rejects.toThrow();
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(new DOMException("Caller cancelled", "AbortError")), 30);
+    const error = await retryAiRequest(operation, controller.signal).then(() => null, error => error);
+    clearTimeout(timer);
+    expect(error).toBeInstanceOf(Error);
+    expect(error.name).toBe("AbortError");
     expect(operation).toHaveBeenCalledTimes(1);
 });
 
@@ -44,4 +49,22 @@ test("already cancelled requests never reach the provider", async () => {
     const operation = mock(async () => "answer");
     await expect(retryAiRequest(operation, AbortSignal.abort())).rejects.toThrow();
     expect(operation).not.toHaveBeenCalled();
+});
+
+test("a stalled attempt is cancelled and retried inside the shared deadline", async () => {
+    const attemptSignals: AbortSignal[] = [];
+    const operation = mock(async (signal: AbortSignal) => {
+        attemptSignals.push(signal);
+        if (attemptSignals.length === 1) return new Promise<string>(() => {});
+        return "recovered";
+    });
+    expect(await retryAiRequest(operation, AbortSignal.timeout(3_000), { attemptMs: 20, retryTimeouts: true })).toBe("recovered");
+    expect(attemptSignals[0]!.aborted).toBeTrue();
+    expect(attemptSignals[1]!.aborted).toBeFalse();
+});
+
+test("caller cancellation cannot trigger a timeout retry", async () => {
+    const operation = mock(async (_signal: AbortSignal) => new Promise<string>(() => {}));
+    await expect(retryAiRequest(operation, AbortSignal.timeout(20), { attemptMs: 100, retryTimeouts: true })).rejects.toThrow();
+    expect(operation).toHaveBeenCalledTimes(1);
 });

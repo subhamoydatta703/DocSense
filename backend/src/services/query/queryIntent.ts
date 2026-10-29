@@ -1,3 +1,9 @@
+/** Short references to "this" or "it" describe the selected source, not a search topic. */
+export function asksAboutSelectedSource(question: string): boolean {
+  const normalized = question.trim().toLowerCase().replace(/[?.!]+$/g, "").trim();
+  return /^(?:what (?:is (?:this|it)|it is)|what(?:'s| is) (?:this (?:source|document|page|website)|(?:this|it) about)|(?:explain|describe) (?:this|it|this (?:source|document|page|website)))(?: please)?$/.test(normalized);
+}
+
 /** Broad requests need complete context; focused requests use similarity retrieval. */
 export function needsCompleteContext(question: string): boolean {
   const namesSpecificSection = /\b(section|clause|chapter|paragraph|page)\s+(?:\d|[ivxlcdm]+\b)/i.test(question);

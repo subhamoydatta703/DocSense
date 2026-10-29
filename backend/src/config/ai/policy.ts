@@ -13,7 +13,8 @@ export const aiModels = {
 };
 export const queryPolicy = {
   requestMs: positiveInteger("QUERY_REQUEST_TIMEOUT_MS", 90_000, 300_000),
-  guardMs: positiveInteger("QUERY_GUARD_TIMEOUT_MS", 15_000, 60_000),
+  guardMs: positiveInteger("QUERY_GUARD_TIMEOUT_MS", 30_000, 60_000),
+  guardAttemptMs: positiveInteger("QUERY_GUARD_ATTEMPT_TIMEOUT_MS", 12_000, 60_000),
   answerMs: positiveInteger("QUERY_ANSWER_TIMEOUT_MS", 35_000, 120_000),
   embeddingMs: 20_000,
   rewriteMs: 3_000,
