@@ -8,7 +8,7 @@ export async function classifyText<T extends readonly [string, ...string[]]>(
   text: string, instructions: string, categories: T, signal?: AbortSignal,
 ) {
   const requestSignal = providerSignal(queryPolicy.guardMs, signal);
-  const response = await retryAiRequest(() => aiGuard.models.generateContent({
+  const response = await retryAiRequest(attemptSignal => aiGuard.models.generateContent({
     model: aiModels.guard,
     contents: JSON.stringify({ text }),
     config: {
@@ -16,10 +16,10 @@ export async function classifyText<T extends readonly [string, ...string[]]>(
       responseMimeType: "application/json",
       responseJsonSchema: guardrailJsonSchema(categories),
       maxOutputTokens: 1024,
-      abortSignal: requestSignal,
-      httpOptions: { timeout: queryPolicy.guardMs },
+      abortSignal: attemptSignal,
+      httpOptions: { timeout: Math.min(queryPolicy.guardAttemptMs, queryPolicy.guardMs) },
     },
-  }), requestSignal);
+  }), requestSignal, { attemptMs: Math.min(queryPolicy.guardAttemptMs, queryPolicy.guardMs), retryTimeouts: true });
   requestSignal.throwIfAborted();
   return parseGuardrailResponse(requireResponseText(response), categories);
 }

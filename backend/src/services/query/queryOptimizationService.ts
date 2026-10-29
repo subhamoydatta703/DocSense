@@ -44,7 +44,16 @@ ${originalQuery}
         model: aiModels.optimization,
         contents: JSON.stringify({ question: originalQuery }),
         // Optional enhancement: promptly fall back to the original question.
-        config: { systemInstruction: prompt.slice(0, prompt.indexOf("User Question:")), maxOutputTokens: 256, abortSignal: providerSignal(queryPolicy.rewriteMs, signal), httpOptions: { timeout: queryPolicy.rewriteMs } },
+        config: {
+            systemInstruction: prompt.slice(0, prompt.indexOf("User Question:")),
+            // The provider counts reasoning tokens against this limit too.
+            // A 256-token cap truncated a live rewrite before it finished.
+            maxOutputTokens: 1024,
+            abortSignal: providerSignal(queryPolicy.rewriteMs, signal),
+            // Gemini rejects a server deadline below 10 seconds. The application
+            // still cancels this optional enhancement after its shorter budget.
+            httpOptions: { timeout: Math.max(10_000, queryPolicy.rewriteMs) },
+        },
     });
 
     signal?.throwIfAborted();

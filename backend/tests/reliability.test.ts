@@ -170,6 +170,59 @@ test("unreadable top matches cannot hide readable evidence in a later candidate 
   expect(rawQuery).toHaveBeenCalledTimes(2);
 });
 
+test("a supported passage above the old similarity cutoff still reaches evidence validation", async () => {
+  const readable = { ...chunkMetadata, id: "readable", content: "A receipt is required for returns.", documentName: "Policy", distance: 0.55 };
+  rawQuery.mockResolvedValueOnce([readable]);
+  expect(await userQueryService("Do I need proof of purchase?", "user", "document")).toContain("receipt is required");
+  expect(generateContent).toHaveBeenCalledTimes(1);
+});
+
+test("short selected sources recover missing passages after an initial model abstention", async () => {
+  const first = { ...chunkMetadata, id: "first", content: "Returns require a receipt.", documentName: "Policy", distance: 0.2 };
+  const second = { ...chunkMetadata, id: "second", chunkIndex: 1, content: "Delivery takes three days.", documentName: "Policy", distance: 0 };
+  rawQuery.mockResolvedValueOnce([first]).mockResolvedValueOnce([first, second]);
+  generateContent.mockResolvedValueOnce({ text: JSON.stringify({ abstained: true, claims: [] }) });
+  generateContent.mockImplementationOnce(async args => {
+    const request = JSON.parse((args as { contents: string }).contents);
+    const source = request.sources.find((item: { chunkId: string }) => item.chunkId === "second");
+    return { text: generatedClaim(source.chunkId, source.text) };
+  });
+  expect(await userQueryService("How long does shipping take?", "user", "document")).toContain("three days");
+  expect(generateContent).toHaveBeenCalledTimes(2);
+});
+
+test("what it is reads the selected Wikipedia introduction without a vague embedding search", async () => {
+  rawQuery.mockResolvedValueOnce([{ ...chunkMetadata, id: "intro", content: "Welcome to Wikipedia, the free encyclopedia that anyone can edit.", documentName: "Wikipedia, the free encyclopedia", distance: 0 }]);
+  expect(await userQueryService("what it is?", "user", "document")).toContain("free encyclopedia");
+  expect(embedContent).not.toHaveBeenCalled();
+  expect(optimizeContent).not.toHaveBeenCalled();
+  expect(guardContent).toHaveBeenCalledTimes(2);
+});
+
+test("long-source introductory questions use bounded opening passages instead of rejecting the whole source", async () => {
+  rawQuery.mockResolvedValueOnce(Array.from({ length: 31 }, (_, index) => ({ ...chunkMetadata, id: `chunk-${index}`, chunkIndex: index, content: `Source section ${index} contains readable text.`, documentName: "Long page", distance: 0 })));
+  expect(await userQueryService("What is this?", "user", "document")).toContain("Source section");
+  const request = JSON.parse((generateContent.mock.calls[0]![0] as { contents: string }).contents);
+  expect(request.contextMode).toBe("selected_passages");
+  expect(request.sources).toHaveLength(8);
+  expect(embedContent).not.toHaveBeenCalled();
+});
+
+test("recovery never treats a truncated long source as complete", async () => {
+  rawQuery.mockResolvedValueOnce([{ ...chunkMetadata, id: "first", content: "Different topic.", documentName: "Long page", distance: 0.2 }]);
+  rawQuery.mockResolvedValueOnce(Array.from({ length: 31 }, (_, index) => ({ ...chunkMetadata, id: `chunk-${index}`, content: `Section ${index}.`, documentName: "Long page", distance: 0 })));
+  generateContent.mockResolvedValueOnce({ text: JSON.stringify({ abstained: true, claims: [] }) });
+  expect(await userQueryService("When does delivery arrive?", "user", "document")).toContain("don't have enough information");
+  expect(generateContent).toHaveBeenCalledTimes(1);
+});
+
+test("a timed-out input check retries once before retrieval and still validates the answer", async () => {
+  guardContent.mockRejectedValueOnce(new DOMException("Provider attempt timed out", "TimeoutError"));
+  rawQuery.mockResolvedValueOnce([{ ...chunkMetadata, id: "graph", content: "A graph is a non-linear data structure.", documentName: "Graph Algorithms", distance: 0.2 }]);
+  expect(await userQueryService("Which type of data structure is graph?", "user", "document")).toContain("non-linear data structure");
+  expect(guardContent).toHaveBeenCalledTimes(3);
+});
+
 test("main-findings questions receive complete selected-source context", async () => {
   rawQuery.mockResolvedValueOnce([{ ...chunkMetadata, id: "chunk", content: "The main finding is supported.", documentName: "Report", distance: 0 }]);
   const result = await userQueryService("What are the main findings?", "user", "document");
@@ -410,6 +463,14 @@ test("input classifier outages retain their provider status", async () => {
   await expect(userQueryService("question", "user", "document")).rejects.toMatchObject({ status: 503, stage: "input_guard" });
   expect(guardContent).toHaveBeenCalledTimes(2);
 });
+
+test("provider gateway timeouts retain their status and input-check stage", async () => {
+  guardContent.mockImplementation(async () => { throw Object.assign(new Error("Provider deadline exceeded"), { status: 504 }); });
+  const error = await userQueryService("Which type of data structure is graph?", "user", "document").then(() => null, error => error);
+  expect(error).toMatchObject({ status: 504, stage: "input_guard" });
+  expect(guardContent).toHaveBeenCalledTimes(2);
+  expect(embedContent).not.toHaveBeenCalled();
+});
 test("caller cancellation in the input classifier blocks the rest of the pipeline", async () => {
   const controller = new AbortController();
   guardContent.mockImplementationOnce(async () => {
@@ -441,6 +502,14 @@ test("optimization outages fall back to original-question retrieval", async () =
   expect(await userQueryService("original question", "user", "document")).toBe("context [Source 1]");
   expect(embedContent.mock.calls[0]![0]).toMatchObject({ contents: "original question" });
 });
+
+test("query rewriting uses an accepted provider deadline while retaining application cancellation", async () => {
+  rawQuery.mockResolvedValueOnce([{ ...chunkMetadata, id: "chunk", content: "A receipt is required.", documentName: "Policy", distance: 0.1 }]);
+  await userQueryService("Do I need a receipt?", "user", "document");
+  const request = optimizeContent.mock.calls[0]![0] as { config: { httpOptions: { timeout: number }; abortSignal: AbortSignal } };
+  expect(request.config.httpOptions.timeout).toBeGreaterThanOrEqual(10_000);
+  expect(request.config.abortSignal).toBeInstanceOf(AbortSignal);
+});
 test("answer pipeline uses relevant context and validates the generated answer", async () => {
   rawQuery.mockResolvedValueOnce([
     { ...chunkMetadata, id: "relevant", content: "Returns are accepted within 42 days.", documentName: "Policy", distance: 0.1 },
@@ -457,10 +526,12 @@ test("answer pipeline uses relevant context and validates the generated answer",
   expect((guardContent.mock.calls[1]![0] as { contents: string }).contents)
     .toContain("Returns are accepted within 42 days. [Source 1]");
 });
-test("retrieval with no relevant chunks skips generation and output validation", async () => {
+test("weak matches still require a supported answer and cannot bypass model abstention", async () => {
   rawQuery.mockResolvedValueOnce([{ ...chunkMetadata, id: "chunk", content: "unrelated", documentName: "file", distance: 0.9 }]);
+  rawQuery.mockResolvedValueOnce([{ ...chunkMetadata, id: "chunk", content: "unrelated", documentName: "file", distance: 0 }]);
+  generateContent.mockResolvedValueOnce({ text: JSON.stringify({ abstained: true, claims: [] }) });
   expect(await userQueryService("question", "user", "document")).toBe("I don't have enough information to answer this question.");
-  expect(generateContent).not.toHaveBeenCalled();
+  expect(generateContent).toHaveBeenCalledTimes(1);
   expect(guardContent).toHaveBeenCalledTimes(1);
 });
 test("unsafe input stops before retrieval and generation", async () => {
@@ -710,7 +781,7 @@ test("production guard functions reject string booleans and contradictory result
 });
 test("an input classifier transient outage recovers before continuing", async () => {
   guardContent.mockRejectedValueOnce(Object.assign(new Error("Overloaded"), { status: 503 }));
-  expect(await userQueryService("question", "user", "document")).toBe("I don't have enough information to answer this question.");
+  expect(await userQueryService("question", "user")).toBe("I don't have enough information to answer this question.");
   expect(guardContent).toHaveBeenCalledTimes(2);
   expect(embedContent).toHaveBeenCalledTimes(1);
 });
@@ -756,7 +827,9 @@ test("oversized full-document summaries report their limit without presenting pa
 });
 test("legacy marker-only vectors never become generation context", async () => {
   rawQuery.mockResolvedValueOnce([{ ...chunkMetadata, id: "chunk", content: "-- 1 of 1 --", documentName: "resume.pdf", distance: 0.1 }]);
-  expect(await userQueryService("question", "user", "document")).toBe("I don't have enough information to answer this question.");
+  const error = await userQueryService("question", "user", "document").then(() => null, error => error);
+  expect(error).toMatchObject({ status: 409, stage: "retrieval" });
+  expect(error.message).toContain("no readable indexed text");
   expect(generateContent).not.toHaveBeenCalled();
 });
 test("a marker-only processing job fails with an actionable reason without creating embeddings", async () => {

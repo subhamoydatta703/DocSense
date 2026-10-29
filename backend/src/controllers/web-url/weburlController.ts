@@ -7,7 +7,7 @@ import { uploadFile } from '../../services/storage/s3storageService';
 
 import { enqueueDocument } from '../../queue/documentQueue';
 import { createFileDBWebUrl } from '../../services/web-url/uploadWebUrlService';
-import { CreateWebUrlSchema, assertPublicHttpsUrl } from '../../utils/urlSecurity';
+import { CreateWebUrlSchema } from '../../utils/urlSecurity';
 import z from 'zod';
 import { splitSourceText, SourceValidationError } from '../../utils/sourceText';
 import { ServiceError, runQueryStage } from '../../errors/serviceError';
@@ -19,8 +19,6 @@ import { ServiceError, runQueryStage } from '../../errors/serviceError';
 export const webUrlContent = async (req: AuthenticatedRequest, res: Response) => {
     try {
         const validated = CreateWebUrlSchema.parse({ url: req.body.url });
-
-        await assertPublicHttpsUrl(validated.url);
 
         const { content, originalName } = await runQueryStage("source_fetch", () => webUrlContentService(validated.url));
         await splitSourceText(content);
